@@ -102,15 +102,15 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       },
     })),
 
-  setFetchLinkMetadata: (value: Boolean) =>
+  setFetchLinkMetadata: (value: boolean) =>
     set((state) => ({
       config: {
         ...state.config,
-        editor: { ...state.config.editor, fetchLinkMetadata: value },
+        privacy: { ...state.config.privacy, fetchLinkMetadata: value },
       },
     })),
 
-  setAutoCheckForUpdates: (value: any) =>
+  setAutoCheckForUpdates: (value: boolean) =>
     set((state) => ({
       config: {
         ...state.config,

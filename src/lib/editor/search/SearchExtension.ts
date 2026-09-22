@@ -278,6 +278,10 @@ export interface SearchStorage {
 }
 
 declare module '@tiptap/core' {
+  interface Storage {
+    search: SearchStorage;
+  }
+
   interface Commands<ReturnType> {
     search: {
       setSearchQuery: (query: string, opts: { caseSensitive: boolean; useRegex: boolean }) => ReturnType;

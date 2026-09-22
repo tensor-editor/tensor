@@ -15,13 +15,13 @@ export function useAutosave() {
 
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      const { editor, filePath } = useDocumentStore.getState();
+      const { editor, filePath, pageSetup } = useDocumentStore.getState();
       if (!editor) return;
 
       await saveRecoveryCopy(editor, filePath);
 
       if (filePath) {
-        await saveDocument(editor, filePath);
+        await saveDocument(editor, filePath, pageSetup);
         await clearRecoveryCopy(filePath);
         useDocumentStore.setState({ isDirty: false });
       }

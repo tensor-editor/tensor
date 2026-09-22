@@ -26,7 +26,7 @@ export function useSearchMatches(editor: Editor | null): SearchMatchesState {
     }
 
     const sync = () => {
-      const storage = editor.storage.search as SearchMatchesState | undefined;
+      const storage = editor.storage.search;
       setState({
         matches: storage?.matches ?? [],
         currentIndex: storage?.currentIndex ?? -1,
