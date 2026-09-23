@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PAGE_GAP, DEFAULT_MARGINS } from '../pagination/constants';
+import { PAGE_GAP, DEFAULT_MARGINS } from '../document/pageSetup';
 import { SHORTCUTS } from '../shortcuts';
 
 const DEFAULT_KEYBINDINGS: Record<string, string> = Object.fromEntries(

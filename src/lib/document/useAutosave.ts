@@ -18,7 +18,7 @@ export function useAutosave() {
       const { editor, filePath, pageSetup } = useDocumentStore.getState();
       if (!editor) return;
 
-      await saveRecoveryCopy(editor, filePath);
+      await saveRecoveryCopy(editor, filePath, pageSetup);
 
       if (filePath) {
         await saveDocument(editor, filePath, pageSetup);

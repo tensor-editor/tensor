@@ -1,6 +1,18 @@
 import { z } from 'zod';
+import type { PageSetup } from './pageSetup';
 
 export const CURRENT_DOCUMENT_VERSION = 1;
+
+const PageSetupSchema = z.object({
+  pageSize: z.string(),
+  margins: z.object({
+    top: z.number(),
+    bottom: z.number(),
+    left: z.number(),
+    right: z.number(),
+  }),
+  pageGap: z.number(),
+}) satisfies z.ZodType<PageSetup>;
 
 export const DocumentFileSchema = z.object({
   version: z.number(),
@@ -10,16 +22,7 @@ export const DocumentFileSchema = z.object({
     createdAt: z.string().optional(),
     modifiedAt: z.string().optional(),
     originalPath: z.string().optional(),
-    pageSetup: z.object({
-      pageSize: z.string(),
-      margins: z.object({
-        top: z.number(),
-        bottom: z.number(),
-        left: z.number(),
-        right: z.number(),
-      }),
-      pageGap: z.number(),
-    }).optional(),
+    pageSetup: PageSetupSchema.optional(),
   }).default({}),
 });
 
