@@ -100,29 +100,10 @@ body {
   outline: none;
 }
 
-.page-break-spacer {
-  display: block;
-  width: 100%;
-  user-select: none;
-}
-
-.page-break-spacer::selection {
-  background: transparent;
-}
-
-.pagination-collapse-bottom {
-  margin-bottom: 0 !important;
-}
-
-.pagination-collapse-top {
+/* The document's very first block gets its natural CSS margin-top
+   collapsed, matching how every editor treats the top of the document. */
+.ProseMirror > :first-child {
   margin-top: 0 !important;
-}
-
-.ProseMirror ::selection {
-  background: transparent;
-}
-.ProseMirror ::-moz-selection {
-  background: transparent;
 }
 
 .ProseMirror li,

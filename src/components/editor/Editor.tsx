@@ -7,9 +7,8 @@ import { Color } from "@tiptap/extension-color";
 import { Highlight } from "@tiptap/extension-highlight";
 import { useDocumentStore } from "../../lib/document/store";
 import { useConfigStore } from "../../lib/config/store";
-import { PaginationExtension } from "../../lib/pagination/PaginationExtension";
 import { PageBreakNode } from "../../lib/pagination/PageBreakNode";
-import { PaginatedEditor } from "./PaginatedEditor";
+import { PagelessEditor } from "./PagelessEditor";
 import {
   OrderedListWithStyle,
   UnorderedListWithStyle,
@@ -29,7 +28,6 @@ import Link from "@tiptap/extension-link";
 export function Editor() {
   const setEditor = useDocumentStore((s) => s.setEditor);
   const markDirty = useDocumentStore((s) => s.markDirty);
-  const pageSetup = useDocumentStore((s) => s.pageSetup);
 
   const defaultFontFamily = useConfigStore(
     (s) => s.config.editor.defaultFontFamily,
@@ -37,6 +35,7 @@ export function Editor() {
   const defaultFontSize = useConfigStore(
     (s) => s.config.editor.defaultFontSize,
   );
+  const mode = useConfigStore((s) => s.config.editor.defaultPageLayout);
 
   const editor = useEditor({
     extensions: [
@@ -73,11 +72,6 @@ export function Editor() {
       SearchExtension,
       DynamicShortcutsExtension,
       PageBreakNode,
-      PaginationExtension.configure({
-        pageGap: pageSetup.pageGap,
-        marginTop: pageSetup.margins.top,
-        marginBottom: pageSetup.margins.bottom,
-      }),
     ],
     content: "<p>Start typing…</p>",
     onUpdate: () => markDirty(),
@@ -147,14 +141,20 @@ export function Editor() {
     return () => setEditor(null);
   }, [editor, setEditor]);
 
-  return (
-    <PaginatedEditor
+  // INTERIM: both branches render PagelessEditor until M4 lands
+  // PaginatedView, which swaps the 'Pages' branch. Paginated is
+  // Tensor's default and identity.
+  return mode === 'Pages' ? (
+    <PagelessEditor
       editor={editor}
-      pageSizeKey={pageSetup.pageSize}
       fontFamily={defaultFontFamily}
       fontSize={defaultFontSize}
-      margins={pageSetup.margins}
-      pageGap={pageSetup.pageGap}
+    />
+  ) : (
+    <PagelessEditor
+      editor={editor}
+      fontFamily={defaultFontFamily}
+      fontSize={defaultFontSize}
     />
   );
 }
