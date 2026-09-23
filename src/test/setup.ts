@@ -36,12 +36,18 @@ if (typeof (globalThis as { DataTransfer?: unknown }).DataTransfer === 'undefine
 
 type StubRecord = Record<string, unknown>;
 
+// Recorded canvas ops, readable by tests via (globalThis as any).__paintOps
+// (reset it before the assertion window).
+const paintOps: Array<{ op: string; args: unknown[] }> = [];
+(globalThis as { __paintOps?: typeof paintOps }).__paintOps = paintOps;
+
 const stubContext: StubRecord = {
   canvas: null,
   fillStyle: '#000',
   font: '',
   textAlign: 'left',
-  fillText: () => {},
+  fillText: (...args: unknown[]) => paintOps.push({ op: 'fillText', args }),
+  fillRect: (...args: unknown[]) => paintOps.push({ op: 'fillRect', args }),
   clearRect: () => {},
   setTransform: () => {},
   measureText: (text: string) => ({
@@ -55,3 +61,36 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   value: () => stubContext,
   configurable: true,
 });
+
+// jsdom ships no IntersectionObserver. The stub auto-reports every
+// observed element as visible (default), which keeps the whole tree
+// mounted for existing tests; the virtualization test flips
+// `auto` off and drives `instances[n].callback(entries, observer)`
+// by hand.
+class IntersectionObserverStub {
+  static instances: IntersectionObserverStub[] = [];
+  static auto = true;
+  callback: (entries: unknown[], observer: unknown) => void;
+  targets = new Set<Element>();
+  constructor(cb: (entries: unknown[], observer: unknown) => void) {
+    this.callback = cb;
+    IntersectionObserverStub.instances.push(this);
+  }
+  observe(el: Element) {
+    this.targets.add(el);
+    if (IntersectionObserverStub.auto) {
+      const target = el;
+      queueMicrotask(() =>
+        this.callback([{ target, isIntersecting: true, intersectionRatio: 1 }], this)
+      );
+    }
+  }
+  unobserve(el: Element) {
+    this.targets.delete(el);
+  }
+  disconnect() {
+    this.targets.clear();
+  }
+}
+(globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = IntersectionObserverStub;
+(globalThis as { __IO?: typeof IntersectionObserverStub }).__IO = IntersectionObserverStub;

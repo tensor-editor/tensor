@@ -10,6 +10,7 @@ interface ConfigStore {
   removeCustomColor: (color: string) => void;
   setUseFloatingToolbar: (value: boolean) => void;
   setReduceMotion: (value: Config["accessibility"]["reduceMotion"]) => void;
+  setSelectionColor: (value: string) => void;
 
   setKeybinding: (id: string, keys: string) => void;
   resetKeybinding: (id: string) => void;
@@ -66,6 +67,14 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       config: {
         ...state.config,
         accessibility: { ...state.config.accessibility, reduceMotion: value },
+      },
+    })),
+
+  setSelectionColor: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, selectionColor: value },
       },
     })),
 

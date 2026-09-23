@@ -15,8 +15,8 @@ import { FakeMetrics } from './fakeMetrics';
 // starts/ends, so every boundary has a case.
 
 const blocks: AdapterBlock[] = [
-  { id: 'a', runs: [{ text: 'hello', style: { fontFamily: 'x', fontSize: 16 } }], text: 'hello', from: 0, to: 7 },
-  { id: 'b', runs: [{ text: 'world', style: { fontFamily: 'x', fontSize: 16 } }], text: 'world', from: 7, to: 14 },
+  { id: 'a', runs: [{ text: 'hello', style: { fontFamily: 'x', fontSize: 16 } }], text: 'hello', from: 0, to: 7, align: 'left', runDecor: [] },
+  { id: 'b', runs: [{ text: 'world', style: { fontFamily: 'x', fontSize: 16 } }], text: 'world', from: 7, to: 14, align: 'left', runDecor: [] },
 ];
 
 function makeLine(blockId: string, page: number, index: number, rangeStart: number, rangeEnd: number, y: number): LineBox {
@@ -36,8 +36,8 @@ function makeLine(blockId: string, page: number, index: number, rangeStart: numb
 // (62/62/26) on page 0; block 'b' wraps 90 chars over 2 lines on page 1.
 const STYLE = { fontFamily: 'x', fontSize: 16 };
 const wrapBlocks: AdapterBlock[] = [
-  { id: 'a', runs: [{ text: 'a'.repeat(150), style: STYLE }], text: 'a'.repeat(150), from: 0, to: 152 },
-  { id: 'b', runs: [{ text: 'b'.repeat(90), style: STYLE }], text: 'b'.repeat(90), from: 152, to: 244 },
+  { id: 'a', runs: [{ text: 'a'.repeat(150), style: STYLE }], text: 'a'.repeat(150), from: 0, to: 152, align: 'left', runDecor: [] },
+  { id: 'b', runs: [{ text: 'b'.repeat(90), style: STYLE }], text: 'b'.repeat(90), from: 152, to: 244, align: 'left', runDecor: [] },
 ];
 const B_TEXT = 153; // 'b' block's first text char
 

@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { LineBox, Run, TextMetrics } from '@tensor-editor/engine';
+import type { RunDecor, TextAlign } from '@/lib/paginated/adapter';
 import { paintLines } from '@/lib/paginated/paint';
 
 interface BlockCanvasProps {
@@ -12,6 +13,8 @@ interface BlockCanvasProps {
   left: number;
   top: number;
   width: number;
+  align: TextAlign;
+  runDecor: readonly RunDecor[];
 }
 
 /**
@@ -26,7 +29,7 @@ interface BlockCanvasProps {
  * unchanged text, is skipped entirely. The canvas DOM node itself is
  * never recreated for an existing (page, block) pair — React keys hold.
  */
-export function BlockCanvas({ lines, runs, text, metrics, left, top, width }: BlockCanvasProps) {
+export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metrics, left, top, width, align, runDecor }: BlockCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const prevLinesRef = useRef<readonly LineBox[] | null>(null);
   const prevTextRef = useRef('');
@@ -40,7 +43,8 @@ export function BlockCanvas({ lines, runs, text, metrics, left, top, width }: Bl
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const boxKey = `${left}|${top}|${width}`;
+    const decorKey = runDecor.map((d) => `${d.color}|${d.highlight}|${d.underline}|${d.strike}`).join(';');
+    const boxKey = `${left}|${top}|${width}|${align}|${decorKey}`;
     const unchanged =
       prevBoxRef.current === boxKey &&
       prevTextRef.current === text &&
@@ -55,12 +59,12 @@ export function BlockCanvas({ lines, runs, text, metrics, left, top, width }: Bl
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintLines(ctx, lines, runs, text, first.rect.y, metrics);
+    paintLines(ctx, lines, runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
 
     prevLinesRef.current = lines;
     prevTextRef.current = text;
     prevBoxRef.current = boxKey;
-  }, [lines, runs, text, metrics, left, top, width, height, first.rect.y]);
+  }, [lines, runs, text, metrics, left, top, width, height, first.rect.y, align, runDecor]);
 
   return (
     <canvas
@@ -71,4 +75,4 @@ export function BlockCanvas({ lines, runs, text, metrics, left, top, width }: Bl
       style={{ left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` }}
     />
   );
-}
+});

@@ -11,6 +11,18 @@ import type { AdapterBlock } from './adapter';
 // engine's: PM pos <-> (block, offset-in-block) <-> LineBox ranges, and
 // from there to stack-local painted rects shared by every overlay.
 
+export type TextAlign = 'left' | 'center' | 'right';
+
+/** THE one alignment-offset function (left/center/right; justify is
+ * engine work, out of the shell). Consumed by paint, caret, selection
+ * rects, and hitTest — a second derivation anywhere is the asymmetry
+ * bug class this kills. */
+export function alignOffset(align: TextAlign, lineWidth: number, contentWidth: number): number {
+  if (align === 'center') return (contentWidth - lineWidth) / 2;
+  if (align === 'right') return contentWidth - lineWidth;
+  return 0;
+}
+
 export interface PaintedRect {
   pageIndex: number;
   /** Stack-local px (pre-zoom). */
@@ -125,8 +137,11 @@ export function textRangeLineRects(
   return spans.map(({ line, s, e, block }, idx) => {
     const first = idx === 0;
     const last = idx === spans.length - 1;
-    const x1 = first || last ? lineOffsetX(line, block, s, metrics) : line.rect.x;
-    const x2 = first || last ? lineOffsetX(line, block, e, metrics) : cb.width;
+    // Partial first/last lines ride the same alignOffset the caret and
+    // hitTest use; middle lines span the full content width.
+    const off = first || last ? alignOffset(block.align, line.rect.width, cb.width) : 0;
+    const x1 = first || last ? off + lineOffsetX(line, block, s, metrics) : line.rect.x;
+    const x2 = first || last ? off + lineOffsetX(line, block, e, metrics) : cb.width;
     return {
       pageIndex: line.pageIndex,
       left: cb.x + x1,
@@ -154,10 +169,13 @@ export function caretGeometry(
   if (!bo) return null;
   const lines = result.lines.filter((l) => l.blockId === bo.block.id);
   const line = lineForOffset(lines, bo.offset);
-  if (!line) return null;
+  const page0 = result.pages[0];
+  if (!line || !page0) return null;
   return {
     pageIndex: line.pageIndex,
-    x: lineOffsetX(line, bo.block, bo.offset, metrics),
+    x:
+      lineOffsetX(line, bo.block, bo.offset, metrics) +
+      alignOffset(bo.block.align, line.rect.width, page0.contentBox.width),
     y: line.rect.y,
     height: line.rect.height,
   };

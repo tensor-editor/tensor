@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, fireEvent } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { useDocumentStore } from '@/lib/document/store';
 import { useConfigStore } from '@/lib/config/store';
 import { DEFAULT_MARGINS, PAGE_GAP } from '@/lib/document/pageSetup';
 import { pasteFromSystemClipboard } from '@/lib/editor/clipboard';
+import { GeneralPanel } from '@/components/settings/panels/GeneralPanel';
 import {
   renderTensorInScrollContainer,
   GEOMETRY,
@@ -340,6 +341,101 @@ describe('M5 STEP 3: clipboard (PM\u2019s own handlers)', () => {
       await pasteFromSystemClipboard(editor);
     });
     expect(editor.state.doc.textContent).toContain('menu-pasted');
+  });
+});
+
+describe('M5.5: alignment symmetry + selection color + cursor', () => {
+  const paintOps = () => (globalThis as { __paintOps?: Array<{ op: string; args: unknown[] }> }).__paintOps ?? [];
+
+  it('centered line: painted x, caret x, and margin-click all use the one offset', async () => {
+    // 'Hi there' = 8 chars = 80px; center offset = (624-80)/2 = 272.
+    const { editor } = renderTensorInScrollContainer(
+      '<p style="text-align: center">Hi there</p>'
+    );
+    await settle();
+    expect(document.querySelectorAll('[data-page-index]')).toHaveLength(1);
+
+    // 1. Painted x (canvas-local, from the recording stub).
+    const ops = paintOps();
+    const ft = [...ops].reverse().find((o) => o.op === 'fillText' && o.args[0] === 'Hi there');
+    expect(ft).toBeDefined();
+    expect(ft!.args[1]).toBe(272);
+
+    // 2. Caret at line end: left = contentX + offset + 80 = 448.
+    act(() => {
+      editor.commands.setTextSelection(9); // end of 'Hi there'
+    });
+    await settle();
+    const caret = document.querySelector('[data-testid="synthetic-caret"]') as HTMLElement;
+    expect(caret.style.left).toBe('448px');
+
+    // 3. Click in the right margin -> the line's END position (nearest-line).
+    mouseDown(CB + 272 + 600, CY + 8);
+    await settle();
+    expect(editor.state.selection.head).toBe(9);
+    // And the left margin clamps to the line's START.
+    mouseDown(CB + 50, CY + 8);
+    await settle();
+    expect(editor.state.selection.head).toBe(1);
+  });
+
+  it('painted desk surface carries the text cursor', async () => {
+    renderTensorInScrollContainer('<p>Hello</p>');
+    await settle();
+    expect(wrapper().className).toContain('cursor-text');
+  });
+
+  it('selection background follows the configured color at SELECTION alpha; empty = theme default', async () => {
+    const { editor } = renderTensorInScrollContainer('<p>Hello world</p>');
+    await settle();
+    act(() => {
+      editor.commands.setTextSelection({ from: 1, to: 6 });
+    });
+    await settle();
+    let r = selRects()[0]!;
+    expect(r.className).toContain('bg-primary/25');
+    expect(r.style.backgroundColor).toBe('');
+
+    act(() => {
+      useConfigStore.setState((state) => ({
+        config: { ...state.config, editor: { ...state.config.editor, selectionColor: '#3b82f6' } },
+      }));
+    });
+    await settle();
+    r = selRects()[0]!;
+    // The picked color paints with the automatic alpha so the text under
+    // the selection stays readable (STEP 7).
+    expect(r.style.backgroundColor).toBe('rgba(59, 130, 246, 0.35)');
+    expect(r.className).not.toContain('bg-primary/25');
+
+    act(() => {
+      useConfigStore.setState((state) => ({
+        config: { ...state.config, editor: { ...state.config.editor, selectionColor: '' } },
+      }));
+    });
+    await settle();
+    expect(selRects()[0]!.className).toContain('bg-primary/25');
+  });
+
+  it('GeneralPanel exposes the selection color via the shared ColorPickerButton under Editor', () => {
+    const { getByText, getByRole } = render(<GeneralPanel />);
+    expect(getByText('Selection Color')).toBeTruthy();
+    // The same split-button chrome the ribbon's text/highlight pickers
+    // use: an icon button plus an options popover trigger.
+    expect(getByRole('button', { name: 'Selection Color options' })).toBeTruthy();
+
+    // Open the options popover, click the 'Theme' reset, then a preset
+    // swatch — the store must follow (the picker writes config directly).
+    act(() => {
+      getByRole('button', { name: 'Selection Color options' }).click();
+    });
+    const reset = getByText('Theme');
+    expect(reset).toBeTruthy(); // resetLabel, shared component vocabulary
+    act(() => {
+      const preset = document.querySelector('[aria-label="#3b82f6"]');
+      (preset as HTMLElement).click();
+    });
+    expect(useConfigStore.getState().config.editor.selectionColor).toBe('#3b82f6');
   });
 });
 

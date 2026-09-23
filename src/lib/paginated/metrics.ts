@@ -19,8 +19,11 @@ import type { TextMetrics, TextStyle } from '@tensor-editor/engine';
  * PaginatedView does this gating.
  */
 
+/** THE one font-string builder — RealMetrics measures with it and the
+ * track painter sets ctx.font from it, so measured widths and painted
+ * advances can never diverge. Style/weight/size/family, full TextStyle. */
 export function fontString(style: TextStyle): string {
-  return `${style.italic ? 'italic ' : ''}${style.bold ? 'bold ' : ''}${style.fontSize}px ${style.fontFamily}`;
+  return `${style.italic ? 'italic ' : ''}${style.bold ? '700 ' : ''}${style.fontSize}px ${style.fontFamily}`;
 }
 
 let singleton: TextMetrics | null = null;

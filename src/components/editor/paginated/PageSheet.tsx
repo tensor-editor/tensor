@@ -5,6 +5,8 @@ interface PageSheetProps {
   geometry: PageGeometry;
   /** Stack-local top offset, logical (pre-zoom) px. */
   top: number;
+  /** IntersectionObserver registration for virtualization. */
+  observeRef?: (el: HTMLDivElement | null) => void;
   children: ReactNode;
 }
 
@@ -16,9 +18,10 @@ interface PageSheetProps {
  * theme's rounded-md computes to 8px). Every DIMENSION still comes from
  * engine geometry (inline width/height above); no CSS-computed sizes
  * anywhere. */
-export function PageSheet({ geometry, top, children }: PageSheetProps) {
+export function PageSheet({ geometry, top, observeRef, children }: PageSheetProps) {
   return (
     <div
+      ref={observeRef}
       data-page-index={geometry.index}
       data-testid="page-sheet"
       role="presentation"

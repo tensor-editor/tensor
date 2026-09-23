@@ -1,5 +1,6 @@
 import type { LayoutResult, TextMetrics } from '@tensor-editor/engine';
 import type { AdapterBlock } from './adapter';
+import { alignOffset } from './positionMap';
 
 // THE NEAREST-LINE RULE (M5, from the legacy dead-zone fixtures): clicks
 // resolve to the nearest line WITHIN the nearest sheet — a click in a
@@ -52,7 +53,9 @@ export function hitTest(
   const block = blocks.find((b) => b.id === line.blockId);
   if (!block) return null;
   const x = localX - cb.x;
-  let cursor = line.rect.x;
+  // Same offset the painter and caret use — the nearest-line rule stays
+  // symmetric with the painted geometry for aligned lines.
+  let cursor = line.rect.x + alignOffset(block.align, line.rect.width, cb.width);
   for (const seg of line.segments) {
     const run = block.runs[seg.runIndex];
     if (!run) continue;

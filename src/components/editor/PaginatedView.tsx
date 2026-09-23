@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { EditorContent, type Editor } from '@tiptap/react';
 import type { Transaction } from '@tiptap/pm/state';
 import type { LayoutEngine, LayoutResult, LineBox, TextMetrics } from '@tensor-editor/engine';
 import { createLayoutEngine } from '@tensor-editor/engine';
 import { pmDocToSemantic, type AdapterBlock } from '@/lib/paginated/adapter';
-import { getRealMetrics } from '@/lib/paginated/metrics';
+import { getRealMetrics, fontString } from '@/lib/paginated/metrics';
 import { assertContiguity } from '@/lib/paginated/paint';
 import {
   blockOffsetToPmPos,
@@ -32,6 +32,9 @@ import { BlockCanvas } from './paginated/BlockCanvas';
 import { SelectionHighlights } from './paginated/SelectionHighlights';
 import { SearchHighlights } from './paginated/SearchHighlights';
 import { FloatingToolbar } from './FloatingToolbar';
+import { LinkBubble } from './LinkBubble';
+import { useLinkBubble } from '@/lib/editor/useLinkBubble';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { TooltipProvider } from '../ui/tooltip';
 
 /**
@@ -108,6 +111,9 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const [searchPaint, setSearchPaint] = useState<SearchPaint | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
   const [adapterError, setAdapterError] = useState<Error | null>(null);
+  /** Pages whose canvases mount: viewport-visible ∪ ±1 buffer (M5.6
+   * STEP 1). Sheets ALWAYS mount — scroll extents are geometry-owned. */
+  const [visiblePages, setVisiblePages] = useState<Set<number> | null>(null);
   // Handlers below run inside PM's dispatch (outside React's render
   // cycle) — they read the fallback flag through this ref, not state.
   const adapterErrorRef = useRef<Error | null>(null);
@@ -124,6 +130,10 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const prevSearchStateRef = useRef<unknown>(null);
   const draggingRef = useRef(false);
   const lastClickRef = useRef<{ t: number; x: number; y: number; c: number } | null>(null);
+  // Virtualization: one observer watches every sheet; ratios drive the
+  // canvas-visible set and the viewport-based status-bar page.
+  const ioRatiosRef = useRef<Map<number, number>>(new Map());
+  const ioRef = useRef<IntersectionObserver | null>(null);
 
   // Store subscriptions exist only to SCHEDULE relayout; the VALUES are
   // read fresh at call time (L4) — these selectors never feed options
@@ -133,6 +143,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const defaultFontSize = useConfigStore((s) => s.config.editor.defaultFontSize);
   const zoomLevel = useConfigStore((s) => s.config.editor.zoomLevel);
   const showFloatingToolbar = useConfigStore((s) => s.config.useFloatingToolbar);
+  const selectionColor = useConfigStore((s) => s.config.editor.selectionColor);
   const setPageInfo = useDocumentStore((s) => s.setPageInfo);
 
   function computeToolbar(rects: readonly PaintedRect[]): FloatingToolbarPosition | null {
@@ -164,7 +175,9 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       metricsRef.current!
     );
     setCaret(geom);
-    setPageInfo(current.result.pages.length, geom ? geom.pageIndex + 1 : 1);
+    // M5.6 STEP 6: the status bar's page is VIEWPORT based (the
+    // IntersectionObserver feed) — the caret no longer moves it.
+    setPageInfo(current.result.pages.length, useDocumentStore.getState().currentPage);
     const rects = selection.empty
       ? []
       : textRangeLineRects(
@@ -340,6 +353,20 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       return;
     }
 
+    // M5.6 STEP 5b: Ctrl/Cmd+click on a painted link opens it via the OS
+    // (the committed legacy rule — plain click places the caret, the
+    // bubble's Open button stays). Opened through the same plugin-opener
+    // the bubble uses.
+    if (e.ctrlKey || e.metaKey) {
+      const linkMark = editor.state.doc.resolve(pos).marks().find((m) => m.type.name === 'link');
+      const href = linkMark?.attrs.href;
+      if (typeof href === 'string' && href) {
+        e.preventDefault();
+        void openUrl(href);
+        return;
+      }
+    }
+
     if (e.shiftKey) {
       // Extend from PM's own anchor — the shell never tracks selection.
       editor.commands.setTextSelection({ from: editor.state.selection.anchor, to: pos });
@@ -417,14 +444,30 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     editor.on('update', onDocUpdate);
     editor.on('selectionUpdate', onSelectionUpdate);
 
-    const fonts =
-      typeof document !== 'undefined' && document.fonts ? document.fonts.ready : Promise.resolve();
+    // Font gate: custom fonts must be LOADED before the first measure —
+    // the engine's line cache never invalidates on metrics identity, so
+    // pre-load measurement would cache fallback-font widths for the whole
+    // session. document.fonts.load forces the configured base font's
+    // load; mark-level families are covered by fonts.ready (the hidden
+    // view renders them, triggering their loads).
     let cancelled = false;
-    void fonts.then(() => {
+    void (async () => {
+      if (typeof document !== 'undefined' && document.fonts) {
+        const { defaultFontFamily: family, defaultFontSize: size } =
+          useConfigStore.getState().config.editor;
+        if (typeof document.fonts.load === 'function') {
+          try {
+            await document.fonts.load(fontString({ fontFamily: family, fontSize: size }));
+          } catch {
+            // unsupported/unregistered font string — ready below still gates
+          }
+        }
+        await document.fonts.ready;
+      }
       if (cancelled) return;
       fontsReadyRef.current = true;
       relayoutRef.current();
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -440,6 +483,78 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   useEffect(() => {
     relayoutRef.current();
   }, [pageSetup, defaultFontFamily, defaultFontSize]);
+
+  // M5.6 STEP 1 + 6: one IntersectionObserver over all sheets. Visible
+  // (±1 buffer) pages mount canvases; the sheet with the highest
+  // intersection ratio is the status bar's current page — viewport
+  // based, not caret based.
+  useEffect(() => {
+    const IO = (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
+    if (!IO) return;
+    const io = new IO((entries) => {
+      for (const entry of entries) {
+        const idx = Number((entry.target as HTMLElement).dataset.pageIndex);
+        if (Number.isNaN(idx)) continue;
+        if (entry.isIntersecting) ioRatiosRef.current.set(idx, entry.intersectionRatio);
+        else ioRatiosRef.current.delete(idx);
+      }
+      const visible = new Set<number>();
+      for (const p of ioRatiosRef.current.keys()) {
+        visible.add(p - 1);
+        visible.add(p);
+        visible.add(p + 1);
+      }
+      visible.delete(-1);
+      setVisiblePages(visible);
+      let top = -1;
+      let topRatio = -1;
+      for (const [p, r] of ioRatiosRef.current) {
+        if (r > topRatio) {
+          topRatio = r;
+          top = p;
+        }
+      }
+      if (top >= 0) {
+        const count = layoutRef.current?.result.pages.length ?? 1;
+        setPageInfo(count, top + 1);
+      }
+    });
+    ioRef.current = io;
+    return () => {
+      io.disconnect();
+      ioRef.current = null;
+    };
+  }, [setPageInfo]);
+
+  const observeSheet = useCallback((el: HTMLDivElement | null) => {
+    if (el && ioRef.current) ioRef.current.observe(el);
+  }, []);
+
+  // Group lines per page per block, document order — MEMOIZED on the
+  // LayoutResult reference (M5.6 STEP 3): a stable result yields stable
+  // group objects, so memoized BlockCanvases skip re-render entirely on
+  // unrelated state changes; a relayout (new result) rebuilds groups and
+  // only blocks with new LineBox references repaint (the engine shares
+  // frozen LineBoxes zero-copy across results). Computed before the
+  // early returns — hooks must be unconditional.
+  const groupsByPage = useMemo(() => {
+    const map = new Map<number, { blockId: string; lines: LineBox[] }[]>();
+    if (!layout) return map;
+    for (const line of layout.result.lines) {
+      let pageGroups = map.get(line.pageIndex);
+      if (!pageGroups) {
+        pageGroups = [];
+        map.set(line.pageIndex, pageGroups);
+      }
+      let group = pageGroups.find((g) => g.blockId === line.blockId);
+      if (!group) {
+        group = { blockId: line.blockId, lines: [] };
+        pageGroups.push(group);
+      }
+      group.lines.push(line);
+    }
+    return map;
+  }, [layout]);
 
   // M4.2 caret-follow registration: block PM's native
   // scroll-to-selection (L3) and decline only in the adapter fallback,
@@ -470,6 +585,31 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       dom.removeEventListener('compositionend', onEnd);
     };
   }, [editor]);
+
+  // Link bubble: painted-rect anchor (L3 — the hidden view's coordsAtPos
+  // must never position anything). Resolves a doc position to the
+  // viewport position of its first painted line.
+  const linkCoordsFor = useCallback((pos: number) => {
+    const current = layoutRef.current;
+    const stack = stackRef.current;
+    if (!current || !stack) return { left: 0, top: 0 };
+    const z = useConfigStore.getState().config.editor.zoomLevel / 100;
+    const sr = stack.getBoundingClientRect();
+    const geom = caretGeometry(current.blocks, current.result, pos, metricsRef.current!);
+    const page0 = current.result.pages[0];
+    if (!geom || !page0) return { left: 0, top: 0 };
+    const { pageSetup: setup } = useDocumentStore.getState();
+    const r = caretStackRect(
+      geom,
+      page0.contentBox.x,
+      page0.contentBox.y,
+      page0.size.height,
+      setup.pageGap
+    );
+    return { left: sr.left + r.left * z, top: sr.top + (r.top + r.height) * z };
+  }, []);
+  const linkBubbleRef = useRef<HTMLDivElement>(null);
+  const linkBubble = useLinkBubble(editor, linkBubbleRef, linkCoordsFor);
 
   if (!editor) return null;
 
@@ -512,22 +652,6 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const stackH = result.pages.length * pageH + (result.pages.length - 1) * gap;
   const rootRect = rootRef.current?.getBoundingClientRect();
 
-  // Group lines per page per block, document order.
-  const groupsByPage = new Map<number, { blockId: string; lines: LineBox[] }[]>();
-  for (const line of result.lines) {
-    let pageGroups = groupsByPage.get(line.pageIndex);
-    if (!pageGroups) {
-      pageGroups = [];
-      groupsByPage.set(line.pageIndex, pageGroups);
-    }
-    let group = pageGroups.find((g) => g.blockId === line.blockId);
-    if (!group) {
-      group = { blockId: line.blockId, lines: [] };
-      pageGroups.push(group);
-    }
-    group.lines.push(line);
-  }
-
   return (
     <div className="relative" data-testid="paginated-root" ref={rootRef}>
       <HiddenInputView editor={editor} />
@@ -540,6 +664,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
           never create scrollable overflow. */}
       <div
         data-testid="paginated-zoom-wrapper"
+        className="cursor-text"
         style={{
           width: `${stackW * z}px`,
           height: `${stackH * z}px`,
@@ -562,31 +687,39 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
           {result.pages.map((page) => {
             const pageGroups = groupsByPage.get(page.index) ?? [];
             return (
-              <PageSheet key={page.index} geometry={page} top={page.index * (pageH + gap)}>
-                {pageGroups.map((group) => {
-                  const block = blocks.find((b) => b.id === group.blockId);
-                  if (!block) return null;
-                  const minY = group.lines[0].rect.y;
-                  return (
-                    <BlockCanvas
-                      key={group.blockId}
-                      lines={group.lines}
-                      runs={block.runs}
-                      text={block.text}
-                      metrics={metricsRef.current!}
-                      left={page.contentBox.x}
-                      top={page.contentBox.y + minY}
-                      width={page.contentBox.width}
-                    />
-                  );
-                })}
+              <PageSheet
+                key={page.index}
+                geometry={page}
+                top={page.index * (pageH + gap)}
+                observeRef={observeSheet}
+              >
+                {(visiblePages === null || visiblePages.has(page.index)) &&
+                  pageGroups.map((group) => {
+                    const block = blocks.find((b) => b.id === group.blockId);
+                    if (!block) return null;
+                    const minY = group.lines[0].rect.y;
+                    return (
+                      <BlockCanvas
+                        key={group.blockId}
+                        lines={group.lines}
+                        runs={block.runs}
+                        text={block.text}
+                        metrics={metricsRef.current!}
+                        left={page.contentBox.x}
+                        top={page.contentBox.y + minY}
+                        width={page.contentBox.width}
+                        align={block.align}
+                        runDecor={block.runDecor}
+                      />
+                    );
+                  })}
               </PageSheet>
             );
           })}
           {searchPaint && (
             <SearchHighlights matches={searchPaint.all} current={searchPaint.current} />
           )}
-          <SelectionHighlights rects={selRects} />
+          <SelectionHighlights rects={selRects} color={selectionColor || undefined} />
           {caret &&
             (() => {
               const r = caretStackRect(
@@ -633,6 +766,17 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
             })()}
         </div>
       </div>
+      {/* The link bubble anchors at PAINTED coords (linkCoordsFor) —
+          the hidden view's geometry never positions it (L3). */}
+      {linkBubble && rootRect && (
+        <LinkBubble
+          ref={linkBubbleRef}
+          editor={editor}
+          bubble={linkBubble}
+          containerTop={rootRect.top}
+          containerLeft={rootRect.left}
+        />
+      )}
       {/* The floating toolbar is UI chrome, not document content — it
           renders OUTSIDE the zoom transform at 100% scale, positioned
           from the selection's painted bounding box. */}

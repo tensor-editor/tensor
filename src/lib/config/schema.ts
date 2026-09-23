@@ -26,6 +26,9 @@ export const ConfigSchema = z.object({
     customColors: z.array(z.string()).default([]),
     showNonPrintingChars: z.boolean().default(false),
     zoomLevel: z.number().default(100),
+    /** Painted-selection background; '' = theme primary at selection
+     * opacity (the default look). */
+    selectionColor: z.string().default(''),
   }).default({
     defaultFontFamily: 'system-ui',
     defaultFontSize: 16,
@@ -37,6 +40,7 @@ export const ConfigSchema = z.object({
     customColors: [],
     showNonPrintingChars: false,
     zoomLevel: 100,
+    selectionColor: '',
   }),
   privacy: z.object({
     autoCheckForUpdates: z.boolean().default(false),

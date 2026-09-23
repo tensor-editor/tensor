@@ -53,7 +53,18 @@ function findLinkAt(state: EditorState, pos: number) {
   return { href: linkMark.attrs.href as string, text: state.doc.textBetween(start, end), from: start, to: end };
 }
 
-export function useLinkBubble(editor: Editor | null, bubbleElRef: React.RefObject<HTMLElement | null>) {
+/**
+ * `coordsFor` (M5.6 STEP 5): where the bubble anchors for a given doc
+ * position, in VIEWPORT px. Default: hidden-DOM coordsAtPos (correct for
+ * pageless, where the PM view is the visible surface). Paginated mode
+ * passes a painted-rect resolver — the hidden view's geometry must never
+ * position anything (L3).
+ */
+export function useLinkBubble(
+  editor: Editor | null,
+  bubbleElRef: React.RefObject<HTMLElement | null>,
+  coordsFor?: (pos: number) => { left: number; top: number }
+) {
   const [bubble, setBubble] = useState<LinkBubbleState | null>(null);
   const pinnedRef = useRef(false);
 
@@ -86,14 +97,19 @@ export function useLinkBubble(editor: Editor | null, bubbleElRef: React.RefObjec
         return;
       }
 
-      const domCoords = currentEditor.view.coordsAtPos(existing.from);
+      const coords = coordsFor
+        ? coordsFor(existing.from)
+        : (() => {
+            const domCoords = currentEditor.view.coordsAtPos(existing.from);
+            return { left: domCoords.left, top: domCoords.bottom };
+          })();
       setBubble({
         mode: 'edit',
         href: existing.href,
         text: existing.text,
         from: existing.from,
         to: existing.to,
-        coords: { left: domCoords.left, top: domCoords.bottom },
+        coords,
       });
     }
 
@@ -112,7 +128,7 @@ export function useLinkBubble(editor: Editor | null, bubbleElRef: React.RefObjec
       currentEditor.off('update', updateBubble);
       document.removeEventListener('pointerdown', handlePointerDown, true);
     };
-  }, [editor, bubbleElRef]);
+  }, [editor, bubbleElRef, coordsFor]);
 
   // --- Explicit open: Ctrl+K or LinkButton (Ribbon/FloatingToolbar) ---
   useEffect(() => {
@@ -127,7 +143,12 @@ export function useLinkBubble(editor: Editor | null, bubbleElRef: React.RefObjec
     // edit view rather than starting a blank insert form.
     const existing = findLinkAt(state, from);
     if (existing) {
-      const domCoords = editor.view.coordsAtPos(existing.from);
+      const coords = coordsFor
+        ? coordsFor(existing.from)
+        : (() => {
+            const domCoords = editor.view.coordsAtPos(existing.from);
+            return { left: domCoords.left, top: domCoords.bottom };
+          })();
       pinnedRef.current = true;
       setBubble({
         mode: 'edit',
@@ -135,13 +156,18 @@ export function useLinkBubble(editor: Editor | null, bubbleElRef: React.RefObjec
         text: existing.text,
         from: existing.from,
         to: existing.to,
-        coords: { left: domCoords.left, top: domCoords.bottom },
+        coords,
       });
       return;
     }
 
     const text = empty ? '' : state.doc.textBetween(from, to);
-    const domCoords = editor.view.coordsAtPos(from);
+    const coords = coordsFor
+      ? coordsFor(from)
+      : (() => {
+          const domCoords = editor.view.coordsAtPos(from);
+          return { left: domCoords.left, top: domCoords.bottom };
+        })();
     pinnedRef.current = true;
     setBubble({
       mode: 'insert',
@@ -149,9 +175,9 @@ export function useLinkBubble(editor: Editor | null, bubbleElRef: React.RefObjec
       text,
       from,
       to,
-      coords: { left: domCoords.left, top: domCoords.bottom },
+      coords,
     });
-  }, [insertRequestId, editor]);
+  }, [insertRequestId, editor, coordsFor]);
 
   // --- Explicit close: Cancel/Save/X/Escape inside the popover itself ---
   useEffect(() => {

@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { Moon, Type, Accessibility as AccessibilityIcon } from 'lucide-react';
+import { Moon, Type, Paintbrush, Accessibility as AccessibilityIcon } from 'lucide-react';
 import { useConfigStore } from '@/lib/config/store';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { ColorPickerButton } from '@/components/layout/ribbon/ColorPickerButton';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import type { SettingsSectionDefinition } from '@/lib/settings/types';
 
@@ -27,6 +28,28 @@ function Row({ icon, label, description, children }: { icon: ReactNode; label: s
   );
 }
 
+function SelectionColorRow() {
+  const selectionColor = useConfigStore((s) => s.config.editor.selectionColor);
+  const setSelectionColor = useConfigStore((s) => s.setSelectionColor);
+
+  return (
+    <Row
+      icon={<Paintbrush className="h-4 w-4" />}
+      label="Selection Color"
+      description="Background of the painted text selection; always painted translucent so text stays readable"
+    >
+      {/* The SAME picker the ribbon's text/highlight colors use. */}
+      <ColorPickerButton
+        label="Selection Color"
+        icon={<span className="text-[10px] font-semibold leading-none">ABC</span>}
+        defaultColor={selectionColor || '#3b82f6'}
+        resetLabel="Theme"
+        onChange={(color) => setSelectionColor(color ?? '')}
+      />
+    </Row>
+  );
+}
+
 export function GeneralPanel() {
   const theme = useConfigStore((s) => s.config.theme);
   const setTheme = useConfigStore((s) => s.setTheme);
@@ -47,6 +70,7 @@ export function GeneralPanel() {
         <Row icon={<Type className="h-4 w-4" />} label="Floating Toolbar" description="Show a formatting toolbar near text selections">
           <Switch checked={useFloatingToolbar} onCheckedChange={setUseFloatingToolbar} />
         </Row>
+        <SelectionColorRow />
       </SettingsSection>
 
       <SettingsSection id="accessibility" title="Accessibility">
