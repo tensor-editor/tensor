@@ -1,19 +1,12 @@
 import type { LayoutResult, TextMetrics } from '@tensor-editor/engine';
 import type { AdapterBlock } from './adapter';
 
-/**
- * M4 click hit-testing: painted-canvas point -> text offset -> PM
- * selection. This maps through the engine's POSITIONED FACTS (LineBox
- * rects/segments), NOT through the hidden PM view's DOM — per L3 the
- * hidden view is input-only, never measured, never positioned from.
- * This is the structural cure for the legacy coordsAtPos/posAtCoords
- * dead-zone disease (see docs/legacy/pagination-v1.md): there is no
- * pixel-to-position ambiguity left to correct because the ruler that
- * painted is the ruler that answers.
- *
- * Full interaction fidelity (drag, double-click, IME) is M5 — "the M5
- * hit-test fixture spec" — this file grows there.
- */
+// THE NEAREST-LINE RULE (M5, from the legacy dead-zone fixtures): clicks
+// resolve to the nearest line WITHIN the nearest sheet — a click in a
+// page margin or the inter-sheet gap clamps to that sheet's nearest
+// line, and x beyond a line's end resolves to that line's end position.
+// The spacer/gap geometry that made the legacy clicks ambiguous no
+// longer exists; this is clamping, never correction.
 
 export interface HitResult {
   blockId: string;
@@ -21,47 +14,53 @@ export interface HitResult {
   offset: number;
 }
 
-/**
- * @param x local x relative to the page CONTENT box (logical, pre-zoom px)
- * @param y local y relative to the page CONTENT box
- */
-export function hitTestPoint(
+/** @param localX/localY stack-local (pre-zoom) px. */
+export function hitTest(
   result: LayoutResult,
   blocks: readonly AdapterBlock[],
   metrics: TextMetrics,
-  pageIndex: number,
-  x: number,
-  y: number
+  pageGap: number,
+  localX: number,
+  localY: number
 ): HitResult | null {
+  const page0 = result.pages[0];
+  if (!page0) return null;
+  const pageH = page0.size.height;
+  const stride = pageH + pageGap;
+  const cb = page0.contentBox;
+
+  let pageIndex = Math.floor(localY / stride);
+  // Gap ownership: the second half of a gap belongs to the next sheet.
+  if (localY - pageIndex * stride > pageH + pageGap / 2 && pageIndex < result.pages.length - 1) {
+    pageIndex += 1;
+  }
+  pageIndex = Math.min(Math.max(pageIndex, 0), result.pages.length - 1);
+
   const pageLines = result.lines.filter((l) => l.pageIndex === pageIndex);
   if (pageLines.length === 0) return null;
 
-  let line = pageLines.find((l) => y >= l.rect.y && y < l.rect.y + l.rect.height);
-  if (!line) {
-    // Above the first line or below the last: clamp to the nearest end.
-    if (y < pageLines[0].rect.y) {
-      return { blockId: pageLines[0].blockId, offset: pageLines[0].rangeStart };
-    }
-    line = pageLines[pageLines.length - 1];
-    return { blockId: line.blockId, offset: line.rangeEnd };
-  }
+  const first = pageLines[0];
+  const last = pageLines[pageLines.length - 1];
+  const y = localY - pageIndex * stride - cb.y;
+  if (y < first.rect.y) return { blockId: first.blockId, offset: first.rangeStart };
+  if (y >= last.rect.y + last.rect.height) return { blockId: last.blockId, offset: last.rangeEnd };
 
-  const block = blocks.find((b) => b.id === line!.blockId);
+  // Lines tile the content box (contiguity invariant) — exactly one
+  // contains y; the fallback only guards a broken invariant.
+  const line = pageLines.find((l) => y >= l.rect.y && y < l.rect.y + l.rect.height) ?? last;
+
+  const block = blocks.find((b) => b.id === line.blockId);
   if (!block) return null;
-
-  let offset = line.rangeStart;
+  const x = localX - cb.x;
   let cursor = line.rect.x;
-  for (const segment of line.segments) {
-    const run = block.runs[segment.runIndex];
+  for (const seg of line.segments) {
+    const run = block.runs[seg.runIndex];
     if (!run) continue;
-    for (let i = segment.start; i < segment.end; i++) {
-      const width = metrics.measure(block.text[i]!, run.style);
-      if (x < cursor + width / 2) {
-        return { blockId: line!.blockId, offset: i };
-      }
-      cursor += width;
+    for (let i = seg.start; i < seg.end; i++) {
+      const w = metrics.measure(block.text[i]!, run.style);
+      if (x < cursor + w / 2) return { blockId: line.blockId, offset: i };
+      cursor += w;
     }
-    offset = segment.end;
   }
-  return { blockId: line.blockId, offset };
+  return { blockId: line.blockId, offset: line.rangeEnd };
 }

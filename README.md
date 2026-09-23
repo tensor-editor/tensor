@@ -4,27 +4,30 @@ A paginated word processor built on Tauri + React + TipTap, with layout
 computed by [`@tensor-editor/engine`](../tensor/engine) — Tensor's
 paginated mode is the product default and identity.
 
-## Status: M4 — first pixels (engine-driven PaginatedView)
+## Status: M5 — usable as a primary editor
 
-- **PaginatedView** (`src/components/editor/PaginatedView.tsx`) renders
-  pages from the engine's `LayoutResult`: one absolutely-positioned
-  sheet per `PageGeometry`, per-block-per-page canvases painting
-  `LineBox[]` (`fillText` per segment), a synthetic caret measured with
-  the same metrics instance the engine used. Zoom is an explicit-size
-  wrapper + one scaled stack — no per-element compensation anywhere.
-- The PM (TipTap) view stays mounted but hidden and **input-only**: it
-  receives keyboard input and owns the model selection; nothing about
-  its DOM is ever measured or positioned from. Clicks hit-test the
-  engine's LineBoxes instead.
-- **Pageless mode** (any other `defaultPageLayout`) renders the interim
-  `PagelessEditor` — no pagination, honest scaffolding.
-- Review > **Document Properties** is live: Paper Size (Letter/Legal/A4)
-  reflows the document and persists via `.wpdoc` metadata.
-- `pageBreak` (Ctrl+Enter) renders its marker and forces the following
-  block to start a fresh page (`flow.breakBefore: 'page'`).
-- **Strict adapter**: content the M4 engine can't lay out yet (lists,
-  blockquotes, code blocks, rules) throws loudly and drops the view to
-  the pageless fallback — never a crash, never silent mis-layout.
+- **Selection**: the painted overlay is a PROJECTION of PM's selection
+  (`lib/paginated/positionMap.ts` — all selection changes go through PM
+  transactions; the shell never tracks its own). Mouse selection
+  (drag/shift-click/double-word/triple-block) hit-tests engine
+  `LineBox`es under the nearest-line rule: clicks resolve within the
+  clicked sheet, x past a line's end resolves to that line's end,
+  margin/gap clicks clamp to the nearest sheet's nearest line.
+- **Clipboard**: native copy/cut/paste route through PM's own handlers
+  on the hidden view; the Edit menu pastes via
+  `@tauri-apps/plugin-clipboard-manager` (plain text; native Ctrl+V
+  keeps the rich path). Paste re-mints block ids.
+- **Search**: matches paint on the tracks (token colors), distinct from
+  selection; current-match navigation scrolls via the M4.2 minimal-edge
+  follow.
+- **Floating toolbar** positions from the selection's engine-rect
+  bounding box (flip/clamped); pageless implementation untouched.
+- **IME**: composition preview paints at the caret from event text —
+  the one sanctioned L3 exception (input state, not geometry).
+- M4's engine-driven core stands: sheets from `PageGeometry`, glyphs
+  from `LineBox` segments, synthetic caret, minimal-edge scroll, zoom
+  without compensation, strict-adapter pageless fallback, Document
+  Properties paper size.
 
 ### The laws (M4)
 
@@ -53,10 +56,12 @@ npm run build      # tsc + vite build
 
 | Area | Where |
 |---|---|
+| PM pos ↔ engine blocks/LineBoxes (selection projection, hit tests) | `src/lib/paginated/positionMap.ts` |
+| Nearest-line click rule | `src/lib/paginated/hitTest.ts` |
 | Page geometry types, `PAGE_SIZES`, `toLayoutOptions` | `src/lib/document/pageSetup.ts` |
 | PM doc → engine `SemanticDoc` (strict kinds) | `src/lib/paginated/adapter.ts` |
 | `RealMetrics` (the one measurement ruler) | `src/lib/paginated/metrics.ts` |
 | Sheet painting + contiguity assert | `src/lib/paginated/paint.ts` |
-| Synthetic caret, click hit-testing | `src/lib/paginated/caret.ts`, `hitTest.ts` |
+| Minimal-edge caret-follow scroll spec | `src/lib/paginated/caretFollow.ts` |
 | Stable block ids (engine edit-survival contract) | `src/lib/editor/BlockIdExtension.ts` |
-| Legacy pipeline spec (the M5 hit-test fixture) | `docs/legacy/pagination-v1.md` |
+| Menu paste bridge | `src/lib/editor/clipboard.ts` |

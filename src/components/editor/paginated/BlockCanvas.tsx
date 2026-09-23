@@ -66,6 +66,7 @@ export function BlockCanvas({ lines, runs, text, metrics, left, top, width }: Bl
     <canvas
       ref={canvasRef}
       data-block-id={lines[0].blockId}
+      role="presentation"
       className="absolute"
       style={{ left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` }}
     />

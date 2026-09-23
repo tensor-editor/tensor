@@ -4,7 +4,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { useDocumentStore } from '@/lib/document/store';
 import { useConfigStore } from '@/lib/config/store';
 import { DEFAULT_MARGINS, PAGE_GAP } from '@/lib/document/pageSetup';
-import { renderTensorInScrollContainer, GEOMETRY } from './harness';
+import { renderTensorInScrollContainer, mockRects, captureScroll, GEOMETRY } from './harness';
 
 /**
  * M4.2 STEP 4 — scroll policy, exact deltas. jsdom lays out nothing, so
@@ -25,28 +25,7 @@ const twoPageDoc = fullPageParagraph + fullPageParagraph;
 // Stack-local geometry under FakeMetrics + default Letter setup:
 // contentY = 96, page stride = 1056+32 = 1088, caret height = 16,
 // CARET_SCROLL_PAD_PX = 16. Deltas below are hand-computed from these.
-
-function mockRects(stackTop: number, deskRect: { top: number; bottom: number }) {
-  const stack = document.querySelector('[data-testid="paginated-stack"]') as HTMLElement;
-  const deskEl = document.querySelector('[data-testid="scroll-container"]') as HTMLElement;
-  stack.getBoundingClientRect = () =>
-    ({ top: stackTop, left: 0, right: 816, bottom: stackTop + 2176, width: 816, height: 2176, x: 0, y: stackTop, toJSON: () => ({}) }) as DOMRect;
-  deskEl.getBoundingClientRect = () =>
-    ({ top: deskRect.top, left: 0, right: 900, bottom: deskRect.bottom, width: 900, height: deskRect.bottom - deskRect.top, x: 0, y: deskRect.top, toJSON: () => ({}) }) as DOMRect;
-  return { stack, desk: deskEl };
-}
-
-function captureScroll(el: HTMLElement): { read: () => number } {
-  let value = 0;
-  Object.defineProperty(el, 'scrollTop', {
-    get: () => value,
-    set: (v: number) => {
-      value = v;
-    },
-    configurable: true,
-  });
-  return { read: () => value };
-}
+// mockRects/captureScroll live in the shared harness.
 
 /** PM caret-motion intent: selection change + PM's own scrollIntoView flag. */
 function moveCaret(editor: ReturnType<typeof renderTensorInScrollContainer>['editor'], pos: number) {

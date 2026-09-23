@@ -21,6 +21,7 @@ export function PageSheet({ geometry, top, children }: PageSheetProps) {
     <div
       data-page-index={geometry.index}
       data-testid="page-sheet"
+      role="presentation"
       className="absolute left-0 rounded-[6px] border border-border bg-white shadow-lg"
       style={{ top: `${top}px`, width: `${geometry.size.width}px`, height: `${geometry.size.height}px` }}
     >

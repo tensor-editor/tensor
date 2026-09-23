@@ -1,5 +1,5 @@
 import { getScrollParent } from '@/lib/editor/domUtils';
-import type { CaretStackRect } from './caret';
+import type { CaretStackRect } from './positionMap';
 
 /**
  * THE SCROLL SPEC (M4.2 — minimal-edge caret-follow, engine-driven):

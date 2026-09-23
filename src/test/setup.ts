@@ -10,6 +10,30 @@ import { cleanup } from '@testing-library/react';
 // across tests.
 afterEach(cleanup);
 
+// jsdom ships no DataTransfer constructor; PM's clipboard handlers only
+// use setData/getData/clearData (verified against prosemirror-view).
+if (typeof (globalThis as { DataTransfer?: unknown }).DataTransfer === 'undefined') {
+  class DataTransferStub {
+    private data = new Map<string, string>();
+    setData(type: string, value: string) {
+      this.data.set(type, value);
+    }
+    getData(type: string) {
+      return this.data.get(type) ?? '';
+    }
+    clearData() {
+      this.data.clear();
+    }
+    get types() {
+      return [...this.data.keys()];
+    }
+    get files() {
+      return [] as File[];
+    }
+  }
+  (globalThis as { DataTransfer?: unknown }).DataTransfer = DataTransferStub;
+}
+
 type StubRecord = Record<string, unknown>;
 
 const stubContext: StubRecord = {

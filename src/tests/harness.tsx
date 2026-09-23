@@ -56,3 +56,39 @@ export const GEOMETRY = {
   charsPerLine: 62,
   linesPerPage: 54,
 } as const;
+
+/** jsdom lays out nothing — pin the two rects geometry math reads. */
+export function mockRects(stackTop: number, deskRect: { top: number; bottom: number }) {
+  const stack = document.querySelector('[data-testid="paginated-stack"]') as HTMLElement;
+  const deskEl = document.querySelector('[data-testid="scroll-container"]') as HTMLElement;
+  stack.getBoundingClientRect = () =>
+    ({ top: stackTop, left: 0, right: 816, bottom: stackTop + 2176, width: 816, height: 2176, x: 0, y: stackTop, toJSON: () => ({}) }) as DOMRect;
+  deskEl.getBoundingClientRect = () =>
+    ({ top: deskRect.top, left: 0, right: 900, bottom: deskRect.bottom, width: 900, height: deskRect.bottom - deskRect.top, x: 0, y: deskRect.top, toJSON: () => ({}) }) as DOMRect;
+  return { stack, desk: deskEl };
+}
+
+/** Capture scrollTop writes (jsdom's has no layout to move). */
+export function captureScroll(el: HTMLElement): { read: () => number } {
+  let value = 0;
+  Object.defineProperty(el, 'scrollTop', {
+    get: () => value,
+    set: (v: number) => {
+      value = v;
+    },
+    configurable: true,
+  });
+  return { read: () => value };
+}
+
+/** jsdom-safe clipboard/composition event with a pinned payload. */
+export function dataEvent(type: string, payload: { clipboardData?: DataTransfer; data?: string }): Event {
+  const ev = new Event(type, { bubbles: true, cancelable: true });
+  if (payload.clipboardData !== undefined) {
+    Object.defineProperty(ev, 'clipboardData', { value: payload.clipboardData });
+  }
+  if (payload.data !== undefined) {
+    Object.defineProperty(ev, 'data', { value: payload.data });
+  }
+  return ev;
+}
