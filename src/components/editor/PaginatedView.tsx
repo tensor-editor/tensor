@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { EditorContent, type Editor } from '@tiptap/react';
+import type { Transaction } from '@tiptap/pm/state';
 import type { LayoutEngine, LayoutResult, LineBox, TextMetrics } from '@tensor-editor/engine';
 import { createLayoutEngine } from '@tensor-editor/engine';
 import { pmDocToSemantic, type AdapterBlock } from '@/lib/paginated/adapter';
 import { getRealMetrics } from '@/lib/paginated/metrics';
 import { assertContiguity } from '@/lib/paginated/paint';
-import { caretGeometry, type CaretGeometry } from '@/lib/paginated/caret';
+import { caretGeometry, caretStackRect, type CaretGeometry } from '@/lib/paginated/caret';
+import { scrollCaretIntoView } from '@/lib/paginated/caretFollow';
+import { setPaintedScrollHandler } from '@/lib/paginated/ScrollGuardExtension';
 import { hitTestPoint } from '@/lib/paginated/hitTest';
 import { toLayoutOptions } from '@/lib/document/pageSetup';
 import { useDocumentStore } from '@/lib/document/store';
@@ -71,6 +75,10 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const [layout, setLayout] = useState<LayoutState | null>(null);
   const [caret, setCaret] = useState<CaretGeometry | null>(null);
   const [adapterError, setAdapterError] = useState<Error | null>(null);
+  // The scroll handler below runs inside PM's dispatch (outside React's
+  // render cycle) — it reads the fallback flag through this ref, not the
+  // state value, so it never sees a stale closure.
+  const adapterErrorRef = useRef<Error | null>(null);
 
   // Latest layout for selection-driven caret updates (no relayout on
   // selection change — moving the caret must not re-run the walk).
@@ -78,6 +86,9 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const fontsReadyRef = useRef(false);
   const stackRef = useRef<HTMLDivElement>(null);
   const relayoutRef = useRef<() => void>(() => {});
+  // M4.2: a scroll-requesting PM transaction arrived; consumed by the
+  // microtask follow (see the events effect).
+  const pendingScrollRef = useRef(false);
 
   // Store subscriptions exist only to SCHEDULE relayout; the VALUES are
   // read fresh at call time (L4) — these selectors never feed options
@@ -122,26 +133,80 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       layoutRef.current = next;
       setLayout(next);
       setAdapterError(null);
+      adapterErrorRef.current = null;
       updateCaretFromSelection();
     } catch (err) {
       // Loud: the adapter/engine throw is the contract violation report;
       // the fallback render is so a crash never eats the document.
       console.error('[PaginatedView] layout failed; falling back to pageless rendering:', err);
-      setAdapterError(err instanceof Error ? err : new Error(String(err)));
+      const error = err instanceof Error ? err : new Error(String(err));
+      adapterErrorRef.current = error;
+      setAdapterError(error);
       setPageInfo(1, 1);
     }
   }
   relayoutRef.current = relayout;
 
   // PM-driven relayout (L3's only PM read: the MODEL, not the view's
-  // geometry). Also the font gate: the first layout must wait for
+  // geometry). Also the font gate: the first layout must wait on
   // document.fonts.ready — the engine's line cache never invalidates on
   // metrics identity, so pre-font-load measurement would cache
   // fallback-font widths for the whole session (see metrics.ts).
+  //
+  // M4.2: the caret-follow TRIGGER is PM's own intent flag —
+  // `transaction.scrolledIntoView` is set only by tr.scrollIntoView(),
+  // which PM's key/input handling sets on caret motion; layout churn
+  // alone dispatches no flagged transaction, so churn never scrolls.
+  // The FOLLOW runs synchronously with the dispatch, AFTER the layout
+  // it must read is fresh: TipTap emits transaction -> selectionUpdate
+  // -> update, so a doc-changing transaction follows at the end of
+  // 'update' (relayout ran first), and a selection-only transaction at
+  // the end of 'selectionUpdate' (layout unchanged). Never inside PM's
+  // handleScrollToSelection — that fires mid-updateState, before this
+  // view's synchronous relayout, and would read a stale layout.
   useEffect(() => {
     if (!editor) return;
-    const onDocUpdate = () => relayoutRef.current();
-    const onSelectionUpdate = () => updateCaretOnlyRef.current();
+
+    const followPendingScroll = () => {
+      if (!pendingScrollRef.current) return;
+      pendingScrollRef.current = false;
+      if (adapterErrorRef.current) return; // fallback: PM native already scrolled the visible DOM
+      const current = layoutRef.current;
+      const stack = stackRef.current;
+      if (!current || !stack) return; // nothing painted yet: nothing to reveal
+      const caretGeom = caretGeometry(
+        current.blocks,
+        current.result,
+        editor.state.selection.head,
+        metricsRef.current!
+      );
+      if (!caretGeom) return; // selection outside text: nothing to reveal
+      const page0 = current.result.pages[0];
+      const { pageSetup: setupNow } = useDocumentStore.getState();
+      const zoomNow = useConfigStore.getState().config.editor.zoomLevel / 100;
+      scrollCaretIntoView(
+        stack,
+        caretStackRect(caretGeom, page0.contentBox.x, page0.contentBox.y, page0.size.height, setupNow.pageGap),
+        zoomNow
+      );
+    };
+
+    const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+      if (!transaction.scrolledIntoView) return; // no intent -> no scroll, ever
+      pendingScrollRef.current = true;
+    };
+    const onDocUpdate = () => {
+      relayoutRef.current();
+      followPendingScroll(); // doc changed: follow reads the fresh layout
+    };
+    const onSelectionUpdate = ({ transaction }: { transaction: Transaction }) => {
+      updateCaretOnlyRef.current();
+      // Selection-only motion (no doc change): the layout is already
+      // current — follow now. A doc-changing transaction is followed by
+      // the 'update' handler above (after relayout), not here.
+      if (!transaction.docChanged) followPendingScroll();
+    };
+    editor.on('transaction', onTransaction);
     editor.on('update', onDocUpdate);
     editor.on('selectionUpdate', onSelectionUpdate);
 
@@ -156,6 +221,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
 
     return () => {
       cancelled = true;
+      editor.off('transaction', onTransaction);
       editor.off('update', onDocUpdate);
       editor.off('selectionUpdate', onSelectionUpdate);
     };
@@ -167,6 +233,19 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   useEffect(() => {
     relayoutRef.current();
   }, [pageSetup, defaultFontFamily, defaultFontSize]);
+
+  // M4.2 caret-follow registration: PM asks "scroll to selection"; we
+  // block its native default (L3: the hidden view's coordsAtPos geometry
+  // must never drive scrolling) and answer against PAINTED coordinates.
+  // Declines (false) only in the adapter fallback, where the visible
+  // pageless DOM is the real content and PM's native scroll is correct.
+  // THE SCROLL SPEC lives in caretFollow.ts; the follow itself runs in
+  // the transaction listener below.
+  useEffect(() => {
+    if (!editor) return;
+    setPaintedScrollHandler(() => !adapterErrorRef.current);
+    return () => setPaintedScrollHandler(null);
+  }, [editor]);
 
   function handleMouseDown(e: React.MouseEvent) {
     if (!editor || adapterError || !layout) return;
@@ -234,7 +313,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     // (keyboard input must never wait on paint).
     return (
       <div className="relative">
-        <InputOnlyView editor={editor} hidden />
+        <HiddenInputView editor={editor} />
       </div>
     );
   }
@@ -265,13 +344,20 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
 
   return (
     <div className="relative" data-testid="paginated-root">
-      <InputOnlyView editor={editor} hidden />
+      <HiddenInputView editor={editor} />
       {/* STEP 4: explicit outer size = natural stack dimensions x zoom, so
           scroll extents are correct BY CONSTRUCTION; the inner stack
           transform scales; every painted child lives inside the transform;
           NOTHING compensates per-element for zoom — the deleted disease
           was SelectionOverlay dividing by the container scale
-          (docs/legacy/pagination-v1.md era). */}
+          (docs/legacy/pagination-v1.md era).
+          M4.1: origin must be TOP LEFT (not top center) — the wrapper is
+          exactly stack*z wide, so a center origin would push the scaled
+          stack outside the wrapper at any z != 1 (clipped left/right
+          halves at 50%/150%); top-left makes the scaled stack fill the
+          wrapper exactly. No overflow:hidden here — sheet shadows must
+          bleed past the sheet edge, and box-shadows never create
+          scrollable overflow, so extents stay exact. */}
       <div
         data-testid="paginated-zoom-wrapper"
         style={{
@@ -279,7 +365,6 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
           height: `${stackH * z}px`,
           margin: '0 auto',
           position: 'relative',
-          overflow: 'hidden',
         }}
         onMouseDown={handleMouseDown}
       >
@@ -291,7 +376,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
             height: `${stackH}px`,
             position: 'relative',
             transform: `scale(${z})`,
-            transformOrigin: 'top center',
+            transformOrigin: 'top left',
           }}
         >
           {result.pages.map((page) => {
@@ -315,20 +400,31 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                     />
                   );
                 })}
-                {caret && caret.pageIndex === page.index && (
-                  <div
-                    data-testid="synthetic-caret"
-                    className="tensor-caret"
-                    style={{
-                      left: `${page.contentBox.x + caret.x}px`,
-                      top: `${page.contentBox.y + caret.y}px`,
-                      height: `${caret.height}px`,
-                    }}
-                  />
-                )}
               </PageSheet>
             );
           })}
+          {/* Stack-level caret, positioned via caretStackRect — the SAME
+              arithmetic the M4.2 caret-follow scroll consumes (one source
+              of truth; never re-derived). Sibling AFTER the sheets, so it
+              paints above them, inside the scale transform (no zoom
+              compensation — M4 law). */}
+          {caret &&
+            (() => {
+              const r = caretStackRect(
+                caret,
+                geometry.contentBox.x,
+                geometry.contentBox.y,
+                pageH,
+                gap
+              );
+              return (
+                <div
+                  data-testid="synthetic-caret"
+                  className="tensor-caret"
+                  style={{ left: `${r.left}px`, top: `${r.top}px`, height: `${r.height}px` }}
+                />
+              );
+            })()}
         </div>
       </div>
     </div>
@@ -336,29 +432,29 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
 }
 
 /**
- * L3's physical form: the PM view stays mounted, opacity 0, pointer
- * events off, caret and selection transparent — keyboard input and the
- * model selection live here, and NOTHING here is ever measured or
- * positioned from. In fallback mode it flips to the visible pageless
- * renderer in place (same EditorContent node — no remount).
+ * L3's physical form — and M4.2 STEP 3's structural fix ("kill Suspect
+ * B"): the hidden PM view is portaled to document.body and positioned
+ * FIXED, a sibling of the App scroller rather than a descendant. Nothing
+ * inside a scroll container can be scroll-triggered by it: PM's native
+ * scrollIntoView (blocked in paginated mode anyway) would find no
+ * scrollable ancestor, and focus() cannot scroll the desk. The
+ * contenteditable itself is untouched — keyboard input, IME, and the
+ * model selection all live here exactly as before; the input-only law
+ * never had any business inside the scroller. Opacity 0, pointer events
+ * off, caret/selection transparent (index.css .pm-input-only).
  */
-function InputOnlyView({ editor, hidden }: { editor: Editor; hidden: boolean }) {
-  const style: CSSProperties | undefined = hidden
-    ? {
-        position: 'absolute',
-        inset: 0,
-        overflow: 'hidden',
-        opacity: 0,
-        pointerEvents: 'none',
-        zIndex: 0,
-      }
-    : undefined;
-  return (
-    <div className={hidden ? 'pm-input-only' : undefined} style={style}>
+function HiddenInputView({ editor }: { editor: Editor }) {
+  return createPortal(
+    <div
+      className="pm-input-only"
+      style={{ position: 'fixed', top: 0, left: 0, width: '600px', opacity: 0, pointerEvents: 'none' }}
+      aria-hidden="true"
+    >
       <EditorContent
         editor={editor}
         className="prose prose-neutral max-w-none focus:outline-none text-black"
       />
-    </div>
+    </div>,
+    document.body
   );
 }

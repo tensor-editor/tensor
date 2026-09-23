@@ -26,7 +26,10 @@ export function renderTensorInScrollContainer(initialHTML?: string) {
   const el: ReactElement = (
     <div
       data-testid="scroll-container"
-      style={{ overflow: 'auto', height: 400, width: 900 }}
+      // overflowY as an explicit longhand so jsdom's getComputedStyle
+      // (used by getScrollParent) reliably reports it — shorthand
+      // expansion for inline styles is inconsistent there.
+      style={{ overflow: 'auto', overflowY: 'auto', height: 400, width: 900 }}
     >
       <Editor metrics={FakeMetrics} />
     </div>

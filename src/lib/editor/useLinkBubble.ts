@@ -22,6 +22,14 @@ export interface LinkBubbleState {
  *  within its parent block — shared by both the reactive
  *  cursor-moved-into-a-link path and the explicit Ctrl+K/button-triggered
  *  check for "is there already a link here?". */
+// Audited against the page-break coordsAtPos discontinuity (see
+// breakBoundaryCorrection.ts): every coordsAtPos call in this file anchors
+// to a *start* position (existing.from below, or a fresh selection's from) —
+// safe by construction, since measurePages.ts's breakPos() is defined as
+// the first position of the page-after's content for both break kinds, so a
+// link/selection that genuinely starts at a breakPos is correctly resolved
+// to the page it starts on. Only end-anchored or pixel-to-position lookups
+// need breakBoundaryCorrection.ts's correction — not needed here.
 function findLinkAt(state: EditorState, pos: number) {
   const marks = state.doc.resolve(pos).marks();
   const linkMark = marks.find((m) => m.type.name === 'link');

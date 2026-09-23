@@ -17,6 +17,31 @@ export interface CaretGeometry {
   height: number;
 }
 
+/** Stack-absolute caret rect in LOGICAL (pre-zoom) px: page stack offset +
+ * content box + LineBox rect. THE single source of this arithmetic — both
+ * the caret painter and the M4.2 caret-follow scroll call this; nobody
+ * re-derives it (a second derivation would drift, and a drifted scroll
+ * target is exactly the legacy jump disease). */
+export interface CaretStackRect {
+  left: number;
+  top: number;
+  height: number;
+}
+
+export function caretStackRect(
+  caret: CaretGeometry,
+  contentX: number,
+  contentY: number,
+  pageHeight: number,
+  pageGap: number
+): CaretStackRect {
+  return {
+    left: contentX + caret.x,
+    top: caret.pageIndex * (pageHeight + pageGap) + contentY + caret.y,
+    height: caret.height,
+  };
+}
+
 export function caretGeometry(
   blocks: readonly AdapterBlock[],
   result: LayoutResult,

@@ -20,7 +20,7 @@ import {
   TextAlignNoShortcut,
 } from '@/lib/editor/RemoveDefShortcuts';
 import { BlockIdExtension } from '@/lib/editor/BlockIdExtension';
-import { PaginatedScrollGuard } from '@/lib/paginated/ScrollGuardExtension';
+import { ScrollGuardExtension } from '@/lib/paginated/ScrollGuardExtension';
 import { PageBreakNode } from '@/lib/pagination/PageBreakNode';
 
 /** The Tensor editor's extension list — one source shared by the app
@@ -67,6 +67,6 @@ export function tensorExtensions(): Extensions {
     // M4: stable block ids (engine edit-survival contract) + the
     // paginated-mode scroll guard (L3).
     BlockIdExtension,
-    PaginatedScrollGuard,
+    ScrollGuardExtension,
   ];
 }

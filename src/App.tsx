@@ -39,7 +39,9 @@ function App() {
       <main className="flex h-screen flex-col bg-background text-foreground">
         <Ribbon />
         <div className="relative flex-1 overflow-hidden">
-          <div className="absolute inset-0 overflow-auto pt-6">
+          {/* M4.1 desk: the editor scroll surface — the muted token reads
+              as the classic gray desk in light mode and adapts in dark. */}
+          <div className="absolute inset-0 overflow-auto bg-muted pt-6">
             <Editor />
           </div>
           <SearchPanel />
