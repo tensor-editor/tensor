@@ -3,6 +3,7 @@ import { Editor } from './components/editor/Editor';
 import { SearchPanel } from './components/editor/SearchPanel';
 import { SearchResultsSidebar } from './components/editor/SearchResultsSidebar';
 import { SettingsDialog } from './components/settings/SettingsDialog';
+import { DocumentPropertiesDialog } from './components/dialogs/DocumentPropertiesDialog';
 import { useConfigStore } from './lib/config/store';
 import { useConfigPersistence } from './lib/config/useConfigPersistence';
 import './index.css';
@@ -49,6 +50,7 @@ function App() {
         <StatusBar />
       </main>
       <SettingsDialog />
+      <DocumentPropertiesDialog />
     </>
   );
 }

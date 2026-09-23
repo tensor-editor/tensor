@@ -1,4 +1,7 @@
-import type { LayoutOptions } from '@tensor-editor/engine/src/types';
+// Package-root import only — deep '@tensor-editor/engine/src/*' imports are
+// banned by the ESLint no-restricted-imports rule (they bypass the package
+// contract and break the moment the engine ships compiled artifacts).
+import type { LayoutOptions } from '@tensor-editor/engine';
 
 export interface PageDimensions {
   width: number;

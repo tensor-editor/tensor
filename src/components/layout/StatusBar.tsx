@@ -6,13 +6,7 @@ import { getDocumentStats, getCursorPosition, type DocumentStats, type CursorPos
 export function StatusBar() {
   const editor = useDocumentStore((s) => s.editor);
   const pageCount = useDocumentStore((s) => s.pageCount);
-  const setPageInfo = useDocumentStore((s) => s.setPageInfo);
-
-  // Honest placeholder: the pageless interim has no page counting; M4
-  // wires real counts from the engine-backed PaginatedView.
-  useEffect(() => {
-    setPageInfo(1, 1);
-  }, [setPageInfo]);
+  const currentPage = useDocumentStore((s) => s.currentPage);
 
   const cursor = useEditorState<CursorPosition | null>({
     editor,
@@ -42,7 +36,7 @@ export function StatusBar() {
     <div className="flex h-7 items-center gap-4 border-t border-border bg-card px-4 text-xs text-muted-foreground">
       <span>{stats.words} words</span>
       <span>{stats.characters} characters</span>
-      <span className="ml-auto">Page {pageCount === 1 ? '1 of 1' : `1 of ${pageCount}`}</span>
+      <span className="ml-auto">Page {currentPage} of {pageCount}</span>
       <span>
         Ln {cursor?.line ?? 1}, Col {cursor?.column ?? 1}
       </span>

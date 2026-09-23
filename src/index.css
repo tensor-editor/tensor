@@ -106,6 +106,38 @@ body {
   margin-top: 0 !important;
 }
 
+/* THE INPUT-ONLY VIEW (M4 law L3): the hidden PM view receives keyboard
+   input and holds the model selection; nothing about it is ever
+   measured, painted, or positioned from. Native caret and selection
+   are invisible BY DESIGN — the synthetic caret and painted sheets own
+   the pixels. */
+.pm-input-only {
+  caret-color: transparent;
+}
+.pm-input-only ::selection {
+  background: transparent;
+}
+
+/* M4 STEP 6: the synthetic caret. Blinks; hidden entirely under
+   prefers-reduced-motion. Lives inside the scaled stack, so zoom never
+   needs compensation. */
+.tensor-caret {
+  position: absolute;
+  width: 1.5px;
+  background: #000;
+  animation: tensor-caret-blink 1.06s steps(1, end) infinite;
+}
+@keyframes tensor-caret-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tensor-caret {
+    animation: none;
+  }
+}
+
 .ProseMirror li,
 .ProseMirror li p {
   line-height: 1.6;

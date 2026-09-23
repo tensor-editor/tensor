@@ -128,7 +128,6 @@ function computeMatches(
 
   regex.lastIndex = 0;
   let execMatch: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((execMatch = regex.exec(text)) !== null) {
     const matchText = execMatch[0];
     if (matchText.length === 0) {

@@ -1,31 +1,14 @@
 import { useEffect } from "react";
 import { useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { TextStyle, FontSize } from "@tiptap/extension-text-style";
-import FontFamily from "@tiptap/extension-font-family";
-import { Color } from "@tiptap/extension-color";
-import { Highlight } from "@tiptap/extension-highlight";
+import type { TextMetrics } from "@tensor-editor/engine";
 import { useDocumentStore } from "../../lib/document/store";
 import { useConfigStore } from "../../lib/config/store";
-import { PageBreakNode } from "../../lib/pagination/PageBreakNode";
+import { tensorExtensions } from "@/lib/editor/tensorExtensions";
+import { ensureBlockIds } from "@/lib/editor/BlockIdExtension";
+import { PaginatedView } from "./PaginatedView";
 import { PagelessEditor } from "./PagelessEditor";
-import {
-  OrderedListWithStyle,
-  UnorderedListWithStyle,
-} from "@/lib/lists/listExtensions";
-import { HeadingWithExtras, ParagraphExtraCommands, ParagraphWithExtras } from "@/lib/editor/ParagraphExtensions";
-import { SearchExtension } from "@/lib/editor/search/SearchExtension";
-import { DynamicShortcutsExtension } from "@/lib/editor/ShortcutsExtension";
-import {
-  BoldNoShortcut,
-  ItalicNoShortcut,
-  UnderlineNoShortcut,
-  StrikeNoShortcut,
-  TextAlignNoShortcut,
-} from "@/lib/editor/RemoveDefShortcuts";
-import Link from "@tiptap/extension-link";
 
-export function Editor() {
+export function Editor({ metrics }: { metrics?: TextMetrics }) {
   const setEditor = useDocumentStore((s) => s.setEditor);
   const markDirty = useDocumentStore((s) => s.markDirty);
 
@@ -38,42 +21,13 @@ export function Editor() {
   const mode = useConfigStore((s) => s.config.editor.defaultPageLayout);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        bulletList: false,
-        orderedList: false,
-        paragraph: false,
-        heading: false,
-        link: false,
-        bold: false,
-        italic: false,
-        underline: false,
-        strike: false,
-      }),
-      BoldNoShortcut,
-      ItalicNoShortcut,
-      UnderlineNoShortcut,
-      StrikeNoShortcut,
-      OrderedListWithStyle,
-      UnorderedListWithStyle,
-      TextStyle,
-      FontFamily,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      FontSize,
-      TextAlignNoShortcut.configure({ types: ["heading", "paragraph"] }),
-      ParagraphWithExtras,
-      HeadingWithExtras,
-      ParagraphExtraCommands,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { target: null, rel: 'noopener noreferrer nofollow' },
-      }),
-      SearchExtension,
-      DynamicShortcutsExtension,
-      PageBreakNode,
-    ],
+    extensions: tensorExtensions(),
     content: "<p>Start typing…</p>",
+    // The INITIAL content is created without a transaction, so the
+    // BlockIdExtension's appendTransaction never fires for it — run the
+    // mint pass explicitly or the first layout call throws on the
+    // id-less doc (adapter contract) and boots into the fallback.
+    onCreate: ({ editor }) => ensureBlockIds(editor),
     onUpdate: () => markDirty(),
     editorProps: {
       handleClick: (_view, _pos, event) => {
@@ -141,15 +95,11 @@ export function Editor() {
     return () => setEditor(null);
   }, [editor, setEditor]);
 
-  // INTERIM: both branches render PagelessEditor until M4 lands
-  // PaginatedView, which swaps the 'Pages' branch. Paginated is
-  // Tensor's default and identity.
+  // Mode routing seam (M4): 'Pages' is Tensor's default and identity —
+  // it renders the engine-driven PaginatedView; everything else renders
+  // the pageless interim shell. M5+ new modes are new branches here.
   return mode === 'Pages' ? (
-    <PagelessEditor
-      editor={editor}
-      fontFamily={defaultFontFamily}
-      fontSize={defaultFontSize}
-    />
+    <PaginatedView editor={editor} metrics={metrics} />
   ) : (
     <PagelessEditor
       editor={editor}
