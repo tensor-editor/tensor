@@ -5,6 +5,7 @@ import { useDocumentStore } from '@/lib/document/store';
 import { useConfigStore } from '@/lib/config/store';
 import { DEFAULT_MARGINS, PAGE_GAP } from '@/lib/document/pageSetup';
 import { renderTensorInScrollContainer, mockRects, captureScroll, GEOMETRY } from './harness';
+import { settleLayout } from './harness';
 
 /**
  * M4.2 STEP 4 — scroll policy, exact deltas. jsdom lays out nothing, so
@@ -54,7 +55,7 @@ function blockStart(editor: ReturnType<typeof renderTensorInScrollContainer>['ed
 }
 
 async function settle() {
-  await act(async () => {});
+  await settleLayout();
 }
 
 beforeEach(() => {

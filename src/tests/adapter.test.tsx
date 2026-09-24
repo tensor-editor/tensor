@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { act } from '@testing-library/react';
 import { pmDocToSemantic } from '@/lib/paginated/adapter';
 import { renderTensorInScrollContainer } from './harness';
+import { settleLayout } from './harness';
 
 const BASE = { fontFamily: 'system-ui', fontSize: 16 };
 
@@ -14,7 +15,7 @@ const BASE = { fontFamily: 'system-ui', fontSize: 16 };
 describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
   it('same doc, same baseStyle -> all blocks reference-identical', async () => {
     const { editor } = renderTensorInScrollContainer('<p>one</p><p>two</p><p>three</p>');
-    await act(async () => {});
+    await settleLayout();
     const a = pmDocToSemantic(editor.state.doc, BASE);
     const b = pmDocToSemantic(editor.state.doc, BASE);
     expect(b.doc.blocks).toEqual(a.doc.blocks);
@@ -26,7 +27,7 @@ describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
 
   it('mid-doc keystroke: untouched blocks keep identity, the edited one is new', async () => {
     const { editor } = renderTensorInScrollContainer('<p>one</p><p>two</p><p>three</p>');
-    await act(async () => {});
+    await settleLayout();
     const before = pmDocToSemantic(editor.state.doc, BASE);
 
     // Type into the middle paragraph -> new PM node object for it only.
@@ -45,7 +46,7 @@ describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
 
   it('baseStyle change invalidates: new objects, correct new defaults', async () => {
     const { editor } = renderTensorInScrollContainer('<p>plain text</p>');
-    await act(async () => {});
+    await settleLayout();
     const a = pmDocToSemantic(editor.state.doc, BASE);
     const b = pmDocToSemantic(editor.state.doc, { fontFamily: 'Georgia', fontSize: 20 });
     expect(b.doc.blocks[0]).not.toBe(a.doc.blocks[0]);
@@ -57,7 +58,7 @@ describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
     const { editor } = renderTensorInScrollContainer(
       '<p>first</p><div data-page-break="true"></div><p>second</p>'
     );
-    await act(async () => {});
+    await settleLayout();
     const a = pmDocToSemantic(editor.state.doc, BASE);
     const b = pmDocToSemantic(editor.state.doc, BASE);
     expect(a.doc.blocks[1].flow).toEqual({ breakBefore: 'page' });
@@ -70,7 +71,7 @@ describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
 
   it('positions stay fresh: deleting a block shifts later from/to', async () => {
     const { editor } = renderTensorInScrollContainer('<p>one</p><p>two</p><p>three</p>');
-    await act(async () => {});
+    await settleLayout();
     act(() => {
       // Remove the whole first node ('<p>one</p>' spans [0,5)).
       editor.commands.deleteRange({ from: 0, to: 5 });
@@ -85,7 +86,7 @@ describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
     // M5.6 STEP 4 receipt: the family used to be read from a standalone
     // 'fontFamily' mark that tiptap v3 never creates.
     const { editor } = renderTensorInScrollContainer('<p>styled words</p>');
-    await act(async () => {});
+    await settleLayout();
     act(() => {
       editor.commands.setTextSelection({ from: 1, to: 13 });
       editor.commands.setFontFamily('Courier New');

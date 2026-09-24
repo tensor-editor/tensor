@@ -106,6 +106,16 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
 
   const [layout, setLayout] = useState<LayoutState | null>(null);
   const [caret, setCaret] = useState<CaretGeometry | null>(null);
+  // M5.9 STEP 2: blink-phase — solid on any input, blinking after
+  // 500ms idle, hidden during non-collapsed selection and window blur.
+  const [caretBlinking, setCaretBlinking] = useState(true);
+  const [editorFocused, setEditorFocused] = useState(true);
+  const blinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetCaretBlink = useCallback(() => {
+    setCaretBlinking(false); // solid on any input
+    if (blinkTimerRef.current) clearTimeout(blinkTimerRef.current);
+    blinkTimerRef.current = setTimeout(() => setCaretBlinking(true), 500);
+  }, []);
   const [selRects, setSelRects] = useState<PaintedRect[]>([]);
   const [toolbarPos, setToolbarPos] = useState<FloatingToolbarPosition | null>(null);
   const [searchPaint, setSearchPaint] = useState<SearchPaint | null>(null);
@@ -175,6 +185,9 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       metricsRef.current!
     );
     setCaret(geom);
+    // M5.9 STEP 2: any input/selection motion resets the caret to solid;
+    // the 500ms idle timer starts blinking.
+    resetCaretBlink();
     // M5.6 STEP 6: the status bar's page is VIEWPORT based (the
     // IntersectionObserver feed) — the caret no longer moves it.
     setPageInfo(current.result.pages.length, useDocumentStore.getState().currentPage);
@@ -240,14 +253,26 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     const { defaultFontFamily: family, defaultFontSize: size } =
       useConfigStore.getState().config.editor;
     try {
+      const __t0 = performance.now();
       const adapted = pmDocToSemantic(editor.state.doc, {
         fontFamily: family,
         fontSize: size,
       });
       const result = engineRef.current!.layout(adapted.doc, toLayoutOptions(pageSetupNow));
+      // Permanent benchmark seam (M5.8): total relayout time, readable
+      // by the self-driving bench and the coalescing test.
+      const __w = globalThis as { __m567?: { relayouts: Array<{ total: number; at: number }> } };
+      __w.__m567 ??= { relayouts: [] };
+      __w.__m567.relayouts.push({ total: performance.now() - __t0, at: performance.now() });
       assertContiguity(result);
       const next: LayoutState = { blocks: adapted.blocks, result };
       layoutRef.current = next;
+      // M5.12 STEP 3: no flushSync — React batches setLayout calls
+      // from N input events into ONE render + ONE useLayoutEffect paint
+      // per frame (the "paint once per frame" model). For single keys,
+      // the microtask render fires within the same frame; for bursts,
+      // all keys' adapter+engine run in the input events, and the
+      // canvas paints once with the final state.
       setLayout(next);
       setAdapterError(null);
       adapterErrorRef.current = null;
@@ -430,8 +455,12 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       if (transaction.scrolledIntoView) pendingScrollRef.current = true;
     };
     const onDocUpdate = () => {
-      relayoutRef.current();
-      followPendingScroll(); // doc changed: follow reads the fresh layout
+      // M5.9 STEP 1: synchronous-first — adapter+engine+commit run in
+      // the input event's own task; text paints in the input's frame.
+      // Over SYNC_BUDGET_PER_FRAME per ~16ms window, the coalescer
+      // (rAF) takes over as the pressure valve.
+      trySyncOrDeferRef.current();
+      followPendingScroll();
     };
     const onSelectionUpdate = ({ transaction }: { transaction: Transaction }) => {
       selectionProjectionRef.current();
@@ -474,6 +503,10 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       editor.off('transaction', onTransaction);
       editor.off('update', onDocUpdate);
       editor.off('selectionUpdate', onSelectionUpdate);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
   }, [editor]);
 
@@ -530,6 +563,59 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     if (el && ioRef.current) ioRef.current.observe(el);
   }, []);
 
+  // M5.9 STEP 1: synchronous-first. The relayout (adapter+engine+commit,
+  // 1-3.5ms) runs INLINE with the input event — text paints in the
+  // input's own frame (the GDocs model). The rAF coalescer survives as
+  // a pressure valve: after SYNC_BUDGET_PER_FRAME sync relayouts in
+  // one ~16ms window (script/IME batch), further updates defer and
+  // coalesce. Threshold from M5.8 measurements: normal typing is 1
+  // keystroke per frame, well under budget.
+  // M5.12 STEP 3: budget = Infinity — process ALL keys in their input
+  // events, paint once per frame (React batches setLayout calls from
+  // N input events into one render). Stagger dies by construction.
+  const SYNC_BUDGET_PER_FRAME = Infinity;
+  const syncBudgetRef = useRef({ count: 0, frameStart: 0 });
+  const rafRef = useRef<number | null>(null);
+  const scheduleCoalescedRelayout = useCallback(() => {
+    if (rafRef.current !== null) return; // already scheduled — coalesce
+    const raf =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (cb: FrameRequestCallback) => {
+            return setTimeout(() => cb(0), 16) as unknown as number;
+          };
+    rafRef.current = raf(() => {
+      rafRef.current = null;
+      relayoutRef.current();
+    });
+  }, []);
+  const scheduleCoalescedRelayoutRef = useRef(scheduleCoalescedRelayout);
+  scheduleCoalescedRelayoutRef.current = scheduleCoalescedRelayout;
+
+  const trySyncOrDeferRelayout = useCallback(() => {
+    const b = syncBudgetRef.current;
+    const now = performance.now();
+    if (now - b.frameStart > 16) {
+      // New frame (16ms ≈ one 60fps boundary) — reset the budget.
+      b.count = 0;
+      b.frameStart = now;
+    }
+    // Benchmark seam (M5.10 STEP 0a): which branch fired.
+    const t = globalThis as { __m59sync?: { sync: number; deferred: number } };
+    t.__m59sync ??= { sync: 0, deferred: 0 };
+    if (b.count < SYNC_BUDGET_PER_FRAME) {
+      b.count += 1;
+      t.__m59sync.sync += 1;
+      relayoutRef.current();
+      return;
+    }
+    // Over budget — defer to the coalescer (rAF).
+    t.__m59sync.deferred += 1;
+    scheduleCoalescedRelayoutRef.current();
+  }, []);
+  const trySyncOrDeferRef = useRef(trySyncOrDeferRelayout);
+  trySyncOrDeferRef.current = trySyncOrDeferRelayout;
+
   // Group lines per page per block, document order — MEMOIZED on the
   // LayoutResult reference (M5.6 STEP 3): a stable result yields stable
   // group objects, so memoized BlockCanvases skip re-render entirely on
@@ -563,6 +649,20 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     if (!editor) return;
     setPaintedScrollHandler(() => !adapterErrorRef.current);
     return () => setPaintedScrollHandler(null);
+  }, [editor]);
+
+  // M5.9 STEP 2: editor focus/blur hides the caret entirely.
+  useEffect(() => {
+    if (!editor) return;
+    const onBlur = () => setEditorFocused(false);
+    const onFocus = () => setEditorFocused(true);
+    editor.on('blur', onBlur);
+    editor.on('focus', onFocus);
+    return () => {
+      editor.off('blur', onBlur);
+      editor.off('focus', onFocus);
+      if (blinkTimerRef.current) clearTimeout(blinkTimerRef.current);
+    };
   }, [editor]);
 
   // IME composition preview (M5 STEP 7). The one sanctioned L3
@@ -676,6 +776,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
         <div
           ref={stackRef}
           data-testid="paginated-stack"
+          data-layout-version={result.version}
           style={{
             width: `${stackW}px`,
             height: `${stackH}px`,
@@ -720,7 +821,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
             <SearchHighlights matches={searchPaint.all} current={searchPaint.current} />
           )}
           <SelectionHighlights rects={selRects} color={selectionColor || undefined} />
-          {caret &&
+          {caret && editorFocused && selRects.length === 0 &&
             (() => {
               const r = caretStackRect(
                 caret,
@@ -733,7 +834,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                 <div
                   data-testid="synthetic-caret"
                   aria-hidden="true"
-                  className="tensor-caret"
+                  className={`tensor-caret ${caretBlinking ? 'tensor-caret-blinking' : ''}`}
                   style={{ left: `${r.left}px`, top: `${r.top}px`, height: `${r.height}px` }}
                 />
               );

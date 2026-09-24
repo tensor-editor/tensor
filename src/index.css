@@ -114,17 +114,34 @@ body {
 .pm-input-only {
   caret-color: transparent;
 }
+
+/* M5.8 F1: content-visibility on the hidden view's blocks — the input-only
+   view renders the full document (opacity 0), but its DOM still costs
+   browser LAYOUT on every keystroke. WebKitGTK showed browserFrame p95
+   38ms (BIG) vs 17ms (SMALL) — the hidden doc's layout is implicated.
+   content-visibility: auto lets the engine skip layout/paint for blocks
+   outside the (fixed, viewport-sized) container; contain-intrinsic-size
+   reserves an estimated height so scrollbar math stays sane. Known
+   risk: the native caret in a skipped block reports wrong coords — the
+   IME popup may misplace; F2 (container follows caret) addresses that
+   if it surfaces. */
+.pm-input-only .ProseMirror > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 24px;
+}
 .pm-input-only ::selection {
   background: transparent;
 }
 
-/* M4 STEP 6: the synthetic caret. Blinks; hidden entirely under
-   prefers-reduced-motion. Lives inside the scaled stack, so zoom never
-   needs compensation. */
+/* M5.9 STEP 2: caret blink — SOLID by default, blinks after 500ms idle
+   via .tensor-caret-blinking (PaginatedView controls the phase). Hidden
+   entirely during non-collapsed selections and on window blur. */
 .tensor-caret {
   position: absolute;
   width: 1.5px;
   background: #000;
+}
+.tensor-caret-blinking {
   animation: tensor-caret-blink 1.06s steps(1, end) infinite;
 }
 @keyframes tensor-caret-blink {
@@ -133,7 +150,7 @@ body {
   100% { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tensor-caret {
+  .tensor-caret-blinking {
     animation: none;
   }
 }

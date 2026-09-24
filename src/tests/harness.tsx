@@ -92,3 +92,29 @@ export function dataEvent(type: string, payload: { clipboardData?: DataTransfer;
   }
   return ev;
 }
+
+/**
+ * M5.9 STEP 3: version-stability settle — waits until the engine's
+ * layout version (data-layout-version on the stack) stops advancing for
+ * two consecutive microtask+timeout cycles, or times out. Works
+ * identically under the synchronous-first path (immediate) and the
+ * coalesced rAF path (one extra frame). Replaces the fixed 20ms
+ * timeouts the M5.7 coalescer forced onto the suite.
+ */
+export async function settleLayout(timeoutMs = 200): Promise<void> {
+  const version = () =>
+    (document.querySelector('[data-testid="paginated-stack"]') as HTMLElement | null)
+      ?.dataset.layoutVersion ?? null;
+
+  await act(async () => {
+    const deadline = performance.now() + timeoutMs;
+    let last = version();
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 16));
+      const now = version();
+      if (now === last && now !== null) return; // stabilized
+      last = now;
+      if (performance.now() > deadline) return; // timeout — best effort
+    }
+  });
+}

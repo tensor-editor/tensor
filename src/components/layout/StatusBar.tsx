@@ -7,6 +7,19 @@ export function StatusBar() {
   const editor = useDocumentStore((s) => s.editor);
   const pageCount = useDocumentStore((s) => s.pageCount);
   const currentPage = useDocumentStore((s) => s.currentPage);
+  // M5.8 bench trigger: five rapid clicks anywhere on the bar dispatch
+  // 'tensor-bench' (App runs the differential; mouse-only driving).
+  const benchClicks = useRef<{ t: number; n: number }>({ t: 0, n: 0 });
+  const handleBenchClick = () => {
+    const now = Date.now();
+    const s = benchClicks.current;
+    s.n = now - s.t < 2000 ? s.n + 1 : 1;
+    s.t = now;
+    if (s.n >= 5) {
+      s.n = 0;
+      window.dispatchEvent(new Event('tensor-bench'));
+    }
+  };
 
   const cursor = useEditorState<CursorPosition | null>({
     editor,
@@ -33,7 +46,10 @@ export function StatusBar() {
   if (!editor) return null;
 
   return (
-    <div className="flex h-7 items-center gap-4 border-t border-border bg-card px-4 text-xs text-muted-foreground">
+    <div
+      onMouseDown={handleBenchClick}
+      className="flex h-7 items-center gap-4 border-t border-border bg-card px-4 text-xs text-muted-foreground"
+    >
       <span>{stats.words} words</span>
       <span>{stats.characters} characters</span>
       <span className="ml-auto">Page {currentPage} of {pageCount}</span>

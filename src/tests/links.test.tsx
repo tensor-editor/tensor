@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, fireEvent } from '@testing-library/react';
 import { useDocumentStore } from '@/lib/document/store';
-import { renderTensorInScrollContainer, GEOMETRY, mockRects } from './harness';
+import { renderTensorInScrollContainer, GEOMETRY, mockRects, settleLayout } from './harness';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -21,9 +21,7 @@ const CY = GEOMETRY.contentY;
 const wrapper = () => document.querySelector('[data-testid="paginated-zoom-wrapper"]') as HTMLElement;
 
 async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 25));
-  });
+  await settleLayout();
 }
 
 beforeEach(() => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { renderTensor } from './harness';
+import { settleLayout } from './harness';
 
 function topLevelIds(doc: PMNode): Array<string | null> {
   const ids: Array<string | null> = [];
@@ -21,7 +22,7 @@ describe('M4 STEP 1: BlockIdExtension', () => {
 
   it('f. paste re-mints ids (no duplicates)', async () => {
     const { editor } = renderTensor();
-    await act(async () => {});
+    await settleLayout();
 
     // Load pass: every created block got a minted id (legacy docs without
     // ids come through this same path).

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
 import { useDocumentStore } from '@/lib/document/store';
 import { renderTensorInScrollContainer, GEOMETRY } from './harness';
+import { settleLayout } from './harness';
 
 /**
  * M5.6 STEP 1 — virtualization: canvases mount only for visible pages
@@ -57,14 +58,14 @@ afterEach(() => {
 describe('M5.6 STEP 1: virtualization', () => {
   it('canvases mount only for visible ± 1 buffer pages; sheets always mount', async () => {
     const { editor } = renderTensorInScrollContainer(fivePageDoc);
-    await act(async () => {});
+    await settleLayout();
     expect(document.querySelectorAll('[data-page-index]')).toHaveLength(5); // sheets: always
     // Before the first IO report, everything mounts (first-paint parity).
     expect(allCanvases()).toBe(5);
 
     // Viewport shows page 2 (index) most: canvases on 1, 2, 3 only.
     fire([{ pageIndex: 2, ratio: 0.9 }]);
-    await act(async () => {});
+    await settleLayout();
     expect(canvasesOn(0)).toBe(0);
     expect(canvasesOn(1)).toBe(1);
     expect(canvasesOn(2)).toBe(1);
@@ -79,7 +80,7 @@ describe('M5.6 STEP 1: virtualization', () => {
       { pageIndex: 2, ratio: 0 },
       { pageIndex: 4, ratio: 0.8 },
     ]);
-    await act(async () => {});
+    await settleLayout();
     expect(canvasesOn(1)).toBe(0);
     expect(canvasesOn(3)).toBe(1);
     expect(canvasesOn(4)).toBe(1);
@@ -91,9 +92,9 @@ describe('M5.6 STEP 1: virtualization', () => {
 describe('M5.6 STEP 6: viewport-based current page', () => {
   it('the highest-ratio sheet is the status bar page, not the caret page', async () => {
     renderTensorInScrollContainer(fivePageDoc);
-    await act(async () => {});
+    await settleLayout();
     fire([{ pageIndex: 3, ratio: 0.9 }]);
-    await act(async () => {});
+    await settleLayout();
     expect(useDocumentStore.getState().currentPage).toBe(4); // 1-based
     expect(useDocumentStore.getState().pageCount).toBe(5);
     // Typing at the doc end (page 5, caret there) must NOT move the
@@ -102,7 +103,7 @@ describe('M5.6 STEP 6: viewport-based current page', () => {
       const editor = useDocumentStore.getState().editor!;
       editor.commands.setTextSelection(editor.state.doc.content.size);
     });
-    await act(async () => {});
+    await settleLayout();
     expect(useDocumentStore.getState().currentPage).toBe(4);
   });
 });
@@ -110,7 +111,7 @@ describe('M5.6 STEP 6: viewport-based current page', () => {
 describe('M5.6 STEP 3: dirty-block repaint', () => {
   it('a mid-doc keystroke repaints only the edited block (paint-ops proof)', async () => {
     const { editor } = renderTensorInScrollContainer('<p>one</p><p>two</p><p>three</p>');
-    await act(async () => {});
+    await settleLayout();
     expect(document.querySelectorAll('canvas')).toHaveLength(3);
 
     const ops = () => (globalThis as { __paintOps?: Array<{ op: string; args: unknown[] }> }).__paintOps ?? [];
@@ -129,7 +130,7 @@ describe('M5.6 STEP 3: dirty-block repaint', () => {
     act(() => {
       editor.commands.insertContent('Y'); // edit 'two' -> 'tXYwo'
     });
-    await act(async () => {});
+    await settleLayout();
     const texts = ops().filter((o) => o.op === 'fillText').map((o) => o.args[0]);
     expect(texts).toEqual(['tXYwo']); // ONLY the edited block repainted
   });

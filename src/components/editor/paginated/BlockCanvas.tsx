@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react';
+import { memo, useLayoutEffect, useRef } from 'react';
 import type { LineBox, Run, TextMetrics } from '@tensor-editor/engine';
 import type { RunDecor, TextAlign } from '@/lib/paginated/adapter';
 import { paintLines } from '@/lib/paginated/paint';
@@ -19,15 +19,18 @@ interface BlockCanvasProps {
 
 /**
  * STEP 5: the per-block-per-page paint surface. DPR-scaled canvas; one
- * fillText per LineSegment so bold/italic survive wrapping (each segment
- * carries its own run style).
+ * fillText per LineSegment so bold/italic survive wrapping.
  *
- * DIRTY-BLOCK REPAINT, NO REBUILD PER KEYSTROKE: the engine shares frozen
- * LineBox objects ZERO-COPY across layout calls (M3 — cached placements
- * emit the same objects), so reference equality IS the dirty bit. A block
- * whose LineBoxes are all reference-identical to the previous paint, with
- * unchanged text, is skipped entirely. The canvas DOM node itself is
- * never recreated for an existing (page, block) pair — React keys hold.
+ * DIRTY-BLOCK REPAINT, NO REBUILD PER KEYSTROKE (M5.6 STEP 3): the
+ * engine shares frozen LineBox objects zero-copy across layout calls,
+ * so reference equality IS the dirty bit.
+ *
+ * M5.12 STEP 1 — DAMAGE-ONLY RASTER: on a single-block text edit, the
+ * damage is from the first changed line to the end of the block's
+ * fragment on this page (a re-wrap moves everything below). Only that
+ * region is cleared and redrawn; identical lines above the edit keep
+ * their pixels. Falls back to full repaint on canvas resize, first-line
+ * edits, or style changes (the fallback cost = the old behavior).
  */
 export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metrics, left, top, width, align, runDecor }: BlockCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,7 +42,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
   const last = lines[lines.length - 1];
   const height = last.rect.y + last.rect.height - first.rect.y;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -53,13 +56,57 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
       lines.every((l, i) => l === prevLinesRef.current![i]);
     if (unchanged) return;
 
+    // Benchmark seams: paint execution time + px² rasterized.
+    const __w = globalThis as {
+      __m510?: { paints: Array<{ at: number; blockId: string; px2?: number }> };
+    };
+    (__w.__m510 ??= { paints: [] }).paints.push({ at: performance.now(), blockId: lines[0].blockId });
+
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.max(1, Math.round(width * dpr));
-    canvas.height = Math.max(1, Math.round(height * dpr));
+    const newW = Math.max(1, Math.round(width * dpr));
+    const newH = Math.max(1, Math.round(height * dpr));
+
+    // DAMAGE-ONLY: if the canvas bitmap size and placement are unchanged,
+    // and the text change starts beyond the first line, only clear and
+    // redraw from the first changed line down.
+    let damageFrom = 0;
+    if (
+      canvas.width === newW &&
+      canvas.height === newH &&
+      prevBoxRef.current === boxKey &&
+      prevTextRef.current &&
+      prevTextRef.current !== text
+    ) {
+      const oldText = prevTextRef.current;
+      let firstDiff = 0;
+      const common = Math.min(oldText.length, text.length);
+      while (firstDiff < common && oldText[firstDiff] === text[firstDiff]) firstDiff++;
+      damageFrom = lines.findIndex((l) => firstDiff < l.rangeEnd);
+      if (damageFrom < 0) damageFrom = 0;
+    }
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintLines(ctx, lines, runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
+
+    if (damageFrom > 0) {
+      // Damage-only: clear from the first changed line's top to the
+      // canvas bottom, redraw those lines (same coordinate space).
+      const damageTop = lines[damageFrom].rect.y - first.rect.y;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, damageTop, width, height - damageTop);
+      paintLines(ctx, lines.slice(damageFrom), runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
+      // Receipt: px² actually rasterized (cleared + repainted region).
+      __w.__m510!.paints[__w.__m510!.paints.length - 1].px2 = width * (height - damageTop);
+    } else {
+      // Full repaint (canvas resize, edit at line 0, style change, or
+      // initial mount) — same as the previous behavior.
+      canvas.width = newW;
+      canvas.height = newH;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintLines(ctx, lines, runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
+      // Receipt: full canvas.
+      __w.__m510!.paints[__w.__m510!.paints.length - 1].px2 = width * height;
+    }
 
     prevLinesRef.current = lines;
     prevTextRef.current = text;

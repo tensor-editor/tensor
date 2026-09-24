@@ -11,6 +11,7 @@ import {
   mockRects,
   captureScroll,
   dataEvent,
+  settleLayout,
 } from './harness';
 
 // Menu paste reads the system clipboard through the Tauri plugin — mock
@@ -48,9 +49,7 @@ function mouseDown(x: number, y: number, opts: { shiftKey?: boolean } = {}) {
 }
 
 async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 25));
-  });
+  await settleLayout();
 }
 
 beforeEach(() => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
 import { useDocumentStore } from '@/lib/document/store';
 import { renderTensor, renderTensorInScrollContainer, GEOMETRY } from './harness';
+import { settleLayout } from './harness';
 
 // A 40-line paragraph (62 chars/line under FakeMetrics): three of these
 // tile into 54 + 54 + 12 lines -> exactly 3 pages.
@@ -23,7 +24,7 @@ afterEach(() => {
 async function settle() {
   // The view's initial layout is gated on document.fonts.ready (metrics
   // stability, see PaginatedView); jsdom resolves it on a microtask.
-  await act(async () => {});
+  await settleLayout();
 }
 
 describe('M4 PaginatedView integration', () => {
