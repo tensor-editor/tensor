@@ -6,7 +6,6 @@ import { SETTINGS_PANELS } from '@/lib/settings/panels';
 import { useActiveSection } from '@/lib/settings/useActiveSection';
 import { useReducedMotion } from '@/lib/accessibility/useReducedMotion';
 import { revealConfigFile } from '@/lib/config/persistence';
-import { IconButton } from '@/components/layout/IconButton';
 import { cn } from 'cn';
 
 export function SettingsDialog() {

@@ -10,6 +10,9 @@ interface ConfigStore {
   removeCustomColor: (color: string) => void;
   setUseFloatingToolbar: (value: boolean) => void;
   setReduceMotion: (value: Config["accessibility"]["reduceMotion"]) => void;
+  setSelectionColor: (value: string) => void;
+  setMeasurementUnit: (value: Config["editor"]["measurementUnit"]) => void;
+  setPasteOnMiddleClick: (value: boolean) => void;
 
   setKeybinding: (id: string, keys: string) => void;
   resetKeybinding: (id: string) => void;
@@ -69,6 +72,30 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       },
     })),
 
+  setSelectionColor: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, selectionColor: value },
+      },
+    })),
+
+  setMeasurementUnit: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, measurementUnit: value },
+      },
+    })),
+
+  setPasteOnMiddleClick: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, pasteOnMiddleClick: value },
+      },
+    })),
+
   setKeybinding: (id, keys) =>
     set((state) => ({
       config: {
@@ -102,15 +129,15 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       },
     })),
 
-  setFetchLinkMetadata: (value: Boolean) =>
+  setFetchLinkMetadata: (value: boolean) =>
     set((state) => ({
       config: {
         ...state.config,
-        editor: { ...state.config.editor, fetchLinkMetadata: value },
+        privacy: { ...state.config.privacy, fetchLinkMetadata: value },
       },
     })),
 
-  setAutoCheckForUpdates: (value: any) =>
+  setAutoCheckForUpdates: (value: boolean) =>
     set((state) => ({
       config: {
         ...state.config,

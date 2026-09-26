@@ -37,3 +37,14 @@ export function formatColor(hex: string, format: ColorDisplayFormat): string {
   const [h, s, l] = rgbToHsl(r, g, b);
   return `hsl(${h}, ${s}%, ${l}%)`;
 }
+
+/** Hex -> rgba() with an explicit alpha. Returns the input unchanged
+ * for anything the hex parser can't read (already-rgba strings pass
+ * through). Used by the painted selection overlay so a picked color
+ * never paints as an opaque block over the text. */
+export function withAlpha(color: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return color;
+  const [r, g, b] = hexToRgb(m[1]!);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

@@ -2,7 +2,7 @@ import { save, open } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile, rename } from '@tauri-apps/plugin-fs';
 import type { Editor } from '@tiptap/core';
 import { DocumentFileSchema, CURRENT_DOCUMENT_VERSION, type DocumentFile } from './schema';
-import type { PageSetup } from '../pagination/constants';
+import type { PageSetup } from './pageSetup';
 
 const FILE_FILTERS = [{ name: 'Word Processor Document', extensions: ['wpdoc'] }];
 

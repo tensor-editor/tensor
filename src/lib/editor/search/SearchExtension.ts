@@ -128,7 +128,6 @@ function computeMatches(
 
   regex.lastIndex = 0;
   let execMatch: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((execMatch = regex.exec(text)) !== null) {
     const matchText = execMatch[0];
     if (matchText.length === 0) {
@@ -278,6 +277,10 @@ export interface SearchStorage {
 }
 
 declare module '@tiptap/core' {
+  interface Storage {
+    search: SearchStorage;
+  }
+
   interface Commands<ReturnType> {
     search: {
       setSearchQuery: (query: string, opts: { caseSensitive: boolean; useRegex: boolean }) => ReturnType;

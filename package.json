@@ -8,6 +8,8 @@
     "predev": "npm run generate-licenses",
     "build": "tsc && vite build",
     "prebuild": "npm run generate-licenses",
+    "test": "vitest run",
+    "lint": "eslint src",
     "generate-licenses": "node scripts/generate-licenses.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -18,10 +20,12 @@
     "@lizenz/checker": "^0.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.3",
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-fs": "^2.5.2",
     "@tauri-apps/plugin-http": "^2.6.0",
     "@tauri-apps/plugin-opener": "^2",
+    "@tensor-editor/engine": "file:../tensor/engine",
     "@tiptap/extension-color": "3.31.3",
     "@tiptap/extension-font-family": "3.31.3",
     "@tiptap/extension-highlight": "3.31.3",
@@ -34,6 +38,7 @@
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
     "lucide-react": "^1.45.0",
+    "nanoid": "^6.0.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "shadcn": "^4.21.0",
@@ -45,11 +50,18 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",
     "@tauri-apps/cli": "^2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22.20.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "jsdom": "^30.1.1",
     "typescript": "~6.0.3",
-    "vite": "^8.0.16"
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.0.16",
+    "vitest": "^5.0.1"
   }
 }

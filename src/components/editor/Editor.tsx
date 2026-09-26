@@ -1,35 +1,16 @@
 import { useEffect } from "react";
 import { useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { TextStyle, FontSize } from "@tiptap/extension-text-style";
-import FontFamily from "@tiptap/extension-font-family";
-import { Color } from "@tiptap/extension-color";
-import { Highlight } from "@tiptap/extension-highlight";
+import type { TextMetrics } from "@tensor-editor/engine";
 import { useDocumentStore } from "../../lib/document/store";
 import { useConfigStore } from "../../lib/config/store";
-import { PaginationExtension } from "../../lib/pagination/PaginationExtension";
-import { PageBreakNode } from "../../lib/pagination/PageBreakNode";
-import { PaginatedEditor } from "./PaginatedEditor";
-import {
-  OrderedListWithStyle,
-  UnorderedListWithStyle,
-} from "@/lib/lists/listExtensions";
-import { HeadingWithExtras, ParagraphExtraCommands, ParagraphWithExtras } from "@/lib/editor/ParagraphExtensions";
-import { SearchExtension } from "@/lib/editor/search/SearchExtension";
-import { DynamicShortcutsExtension } from "@/lib/editor/ShortcutsExtension";
-import {
-  BoldNoShortcut,
-  ItalicNoShortcut,
-  UnderlineNoShortcut,
-  StrikeNoShortcut,
-  TextAlignNoShortcut,
-} from "@/lib/editor/RemoveDefShortcuts";
-import Link from "@tiptap/extension-link";
+import { tensorExtensions } from "@/lib/editor/tensorExtensions";
+import { ensureBlockIds } from "@/lib/editor/BlockIdExtension";
+import { PaginatedView } from "./PaginatedView";
+import { PagelessEditor } from "./PagelessEditor";
 
-export function Editor() {
+export function Editor({ metrics }: { metrics?: TextMetrics }) {
   const setEditor = useDocumentStore((s) => s.setEditor);
   const markDirty = useDocumentStore((s) => s.markDirty);
-  const pageSetup = useDocumentStore((s) => s.pageSetup);
 
   const defaultFontFamily = useConfigStore(
     (s) => s.config.editor.defaultFontFamily,
@@ -37,49 +18,16 @@ export function Editor() {
   const defaultFontSize = useConfigStore(
     (s) => s.config.editor.defaultFontSize,
   );
+  const mode = useConfigStore((s) => s.config.editor.defaultPageLayout);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        bulletList: false,
-        orderedList: false,
-        paragraph: false,
-        heading: false,
-        link: false,
-        bold: false,
-        italic: false,
-        underline: false,
-        strike: false,
-      }),
-      BoldNoShortcut,
-      ItalicNoShortcut,
-      UnderlineNoShortcut,
-      StrikeNoShortcut,
-      OrderedListWithStyle,
-      UnorderedListWithStyle,
-      TextStyle,
-      FontFamily,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      FontSize,
-      TextAlignNoShortcut.configure({ types: ["heading", "paragraph"] }),
-      ParagraphWithExtras,
-      HeadingWithExtras,
-      ParagraphExtraCommands,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { target: null, rel: 'noopener noreferrer nofollow' },
-      }),
-      SearchExtension,
-      DynamicShortcutsExtension,
-      PageBreakNode,
-      PaginationExtension.configure({
-        pageGap: pageSetup.pageGap,
-        marginTop: pageSetup.margins.top,
-        marginBottom: pageSetup.margins.bottom,
-      }),
-    ],
+    extensions: tensorExtensions(),
     content: "<p>Start typing…</p>",
+    // The INITIAL content is created without a transaction, so the
+    // BlockIdExtension's appendTransaction never fires for it — run the
+    // mint pass explicitly or the first layout call throws on the
+    // id-less doc (adapter contract) and boots into the fallback.
+    onCreate: ({ editor }) => ensureBlockIds(editor),
     onUpdate: () => markDirty(),
     editorProps: {
       handleClick: (_view, _pos, event) => {
@@ -103,6 +51,12 @@ export function Editor() {
     let isLinkMouseDown = false;
 
     function handleMouseDown(e: MouseEvent) {
+      // Fallback-mode middle-click: the visible PM view is an editable,
+      // and Linux webviews paste the X11 primary selection by default —
+      // the Behavior toggle must hold in every mode.
+      if (e.button === 1 && !useConfigStore.getState().config.editor.pasteOnMiddleClick) {
+        e.preventDefault();
+      }
       const target = e.target as HTMLElement;
       const link = target.closest('a');
       isLinkMouseDown = !!link && e.detail === 1 && e.button === 0;
@@ -147,14 +101,16 @@ export function Editor() {
     return () => setEditor(null);
   }, [editor, setEditor]);
 
-  return (
-    <PaginatedEditor
+  // Mode routing seam: 'Pages' is Tensor's default and identity —
+  // it renders the engine-driven PaginatedView; everything else renders
+  // the pageless interim shell. New modes are new branches here.
+  return mode === 'Pages' ? (
+    <PaginatedView editor={editor} metrics={metrics} />
+  ) : (
+    <PagelessEditor
       editor={editor}
-      pageSizeKey={pageSetup.pageSize}
       fontFamily={defaultFontFamily}
       fontSize={defaultFontSize}
-      margins={pageSetup.margins}
-      pageGap={pageSetup.pageGap}
     />
   );
 }

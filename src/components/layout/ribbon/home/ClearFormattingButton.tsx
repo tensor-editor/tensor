@@ -2,7 +2,7 @@ import { RemoveFormatting } from 'lucide-react';
 import type { Editor } from '@tiptap/core';
 import { IconButton } from '../../IconButton';
 
-export function clearFormatting(editor) {
+export function clearFormatting(editor: Editor) {
   editor
     .chain()
     .focus()
@@ -17,7 +17,7 @@ export function ClearFormattingButton({ editor }: { editor: Editor }) {
     <IconButton
       label="Clear Formatting"
       icon={<RemoveFormatting size={16} />}
-      onClick={(e: Editor) => { clearFormatting(e) }}
+      onClick={() => { clearFormatting(editor) }}
       shortcutId="clearFormatting"
     />
   );

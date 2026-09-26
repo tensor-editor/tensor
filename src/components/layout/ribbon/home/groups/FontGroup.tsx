@@ -74,7 +74,9 @@ export function FontGroup() {
                 />
                 <TooltipContent>Font Family</TooltipContent>
               </Tooltip>
-              <SelectContent>
+              <SelectContent
+                alignItemWithTrigger={false}
+                >
                 {FONT_FAMILIES.map((font) => (
                   <SelectItem key={font} value={font} style={{ fontFamily: font }}>
                     {font}
