@@ -54,7 +54,7 @@ function findLinkAt(state: EditorState, pos: number) {
 }
 
 /**
- * `coordsFor` (M5.6 STEP 5): where the bubble anchors for a given doc
+ * `coordsFor`: where the bubble anchors for a given doc
  * position, in VIEWPORT px. Default: hidden-DOM coordsAtPos (correct for
  * pageless, where the PM view is the visible surface). Paginated mode
  * passes a painted-rect resolver — the hidden view's geometry must never

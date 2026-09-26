@@ -11,7 +11,7 @@ import {
 } from '@/lib/paginated/positionMap';
 import { FakeMetrics } from './fakeMetrics';
 
-// STEP 0 unit fixtures — the classic off-by-one habitat is block
+// Unit fixtures — the classic off-by-one habitat is block
 // starts/ends, so every boundary has a case.
 
 const blocks: AdapterBlock[] = [
@@ -59,7 +59,7 @@ const result: LayoutResult = {
   version: 1,
 };
 
-describe('STEP 0: pmPosToBlockOffset (boundaries)', () => {
+describe('pmPosToBlockOffset (boundaries)', () => {
   it('maps interior positions', () => {
     expect(pmPosToBlockOffset(blocks, 3)).toEqual({ block: blocks[0], offset: 2 });
     expect(pmPosToBlockOffset(blocks, 9)).toEqual({ block: blocks[1], offset: 1 });
@@ -90,7 +90,7 @@ describe('STEP 0: pmPosToBlockOffset (boundaries)', () => {
   });
 });
 
-describe('STEP 0: line resolution + x measurement', () => {
+describe('line resolution + x measurement', () => {
   const aLines = lines.filter((l) => l.blockId === 'a');
   const a = wrapBlocks[0]!;
 
@@ -110,7 +110,7 @@ describe('STEP 0: line resolution + x measurement', () => {
   });
 });
 
-describe('STEP 0: textRangeLineRects (selection/search projection)', () => {
+describe('textRangeLineRects (selection/search projection)', () => {
   it('single-line partial x', () => {
     const rects = textRangeLineRects(wrapBlocks, result, 1 + 5, 1 + 10, FakeMetrics, 32);
     expect(rects).toEqual([

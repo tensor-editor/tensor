@@ -101,9 +101,9 @@ export function Editor({ metrics }: { metrics?: TextMetrics }) {
     return () => setEditor(null);
   }, [editor, setEditor]);
 
-  // Mode routing seam (M4): 'Pages' is Tensor's default and identity —
+  // Mode routing seam: 'Pages' is Tensor's default and identity —
   // it renders the engine-driven PaginatedView; everything else renders
-  // the pageless interim shell. M5+ new modes are new branches here.
+  // the pageless interim shell. New modes are new branches here.
   return mode === 'Pages' ? (
     <PaginatedView editor={editor} metrics={metrics} />
   ) : (

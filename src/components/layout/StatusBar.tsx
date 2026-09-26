@@ -7,7 +7,7 @@ export function StatusBar() {
   const editor = useDocumentStore((s) => s.editor);
   const pageCount = useDocumentStore((s) => s.pageCount);
   const currentPage = useDocumentStore((s) => s.currentPage);
-  // M5.8 bench trigger: five rapid clicks anywhere on the bar dispatch
+  // Bench trigger: five rapid clicks anywhere on the bar dispatch
   // 'tensor-bench' (App runs the differential; mouse-only driving).
   const benchClicks = useRef<{ t: number; n: number }>({ t: 0, n: 0 });
   const handleBenchClick = () => {

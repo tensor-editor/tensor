@@ -10,7 +10,7 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 /**
- * M5.6 STEP 5 — links in the paginated tree: the LinkBubble mounts with
+ * Links in the paginated tree: the LinkBubble mounts with
  * PAINTED-rect anchors (L3), Ctrl/Cmd+click on a painted link opens it,
  * plain click places the caret (the committed legacy rule).
  */
@@ -29,7 +29,7 @@ beforeEach(() => {
   useDocumentStore.getState().setPageInfo(1, 1);
 });
 
-describe('M5.6 STEP 5: painted links', () => {
+describe('painted links', () => {
   it('plain click on a link places the caret; Ctrl+click opens via plugin-opener', async () => {
     const { editor } = renderTensorInScrollContainer(
       '<p><a href="https://tensor.dev">link text here</a> tail</p>'

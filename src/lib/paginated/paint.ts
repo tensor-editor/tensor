@@ -4,14 +4,14 @@ import { fontString } from './metrics';
 import { alignOffset } from './positionMap';
 
 /**
- * STEP 5 (M4): painting LineBox[] onto a per-block-per-page canvas.
+ * Painting LineBox[] onto a per-block-per-page canvas.
  * L1: the shell paints, never computes — every coordinate here comes from
  * the engine's positioned facts (LineBox.rect/baseline/segments); nothing
  * is re-derived or re-measured except glyph advances, which go through
  * the SAME metrics instance the engine measured with (widths painted ==
  * widths measured, by construction).
  *
- * M5.5: text color, highlight, underline, and strike ride the segments'
+ * Text color, highlight, underline, and strike ride the segments'
  * run decor (adapter RunDecor); alignment rides the same shared
  * alignOffset the caret and hitTest use. ctx.font comes from the one
  * shared fontString (metrics.ts).
@@ -85,7 +85,7 @@ export function paintLines(
 }
 
 /**
- * Dev-only contiguity assertion (STEP 5): LineBox rects must tile the page
+ * Dev-only contiguity assertion: LineBox rects must tile the page
  * content box with no seams — each page's lines, in document order, run
  * y=0, y+height, y+height+height... The walk machine guarantees this by
  * construction (the y cursor only resets at a page close); this assert is

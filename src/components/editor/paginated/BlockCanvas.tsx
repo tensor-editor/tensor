@@ -18,14 +18,14 @@ interface BlockCanvasProps {
 }
 
 /**
- * STEP 5: the per-block-per-page paint surface. DPR-scaled canvas; one
+ * The per-block-per-page paint surface. DPR-scaled canvas; one
  * fillText per LineSegment so bold/italic survive wrapping.
  *
- * DIRTY-BLOCK REPAINT, NO REBUILD PER KEYSTROKE (M5.6 STEP 3): the
+ * DIRTY-BLOCK REPAINT, NO REBUILD PER KEYSTROKE: the
  * engine shares frozen LineBox objects zero-copy across layout calls,
  * so reference equality IS the dirty bit.
  *
- * M5.12 STEP 1 — DAMAGE-ONLY RASTER: on a single-block text edit, the
+ * DAMAGE-ONLY RASTER: on a single-block text edit, the
  * damage is from the first changed line to the end of the block's
  * fragment on this page (a re-wrap moves everything below). Only that
  * region is cleared and redrawn; identical lines above the edit keep
@@ -58,9 +58,9 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
 
     // Benchmark seams: paint execution time + px² rasterized.
     const __w = globalThis as {
-      __m510?: { paints: Array<{ at: number; blockId: string; px2?: number }> };
+      __benchPaints?: { paints: Array<{ at: number; blockId: string; px2?: number }> };
     };
-    (__w.__m510 ??= { paints: [] }).paints.push({ at: performance.now(), blockId: lines[0].blockId });
+    (__w.__benchPaints ??= { paints: [] }).paints.push({ at: performance.now(), blockId: lines[0].blockId });
 
     const dpr = window.devicePixelRatio || 1;
     const newW = Math.max(1, Math.round(width * dpr));
@@ -96,7 +96,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
       ctx.clearRect(0, damageTop, width, height - damageTop);
       paintLines(ctx, lines.slice(damageFrom), runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
       // Receipt: px² actually rasterized (cleared + repainted region).
-      __w.__m510!.paints[__w.__m510!.paints.length - 1].px2 = width * (height - damageTop);
+      __w.__benchPaints!.paints[__w.__benchPaints!.paints.length - 1].px2 = width * (height - damageTop);
     } else {
       // Full repaint (canvas resize, edit at line 0, style change, or
       // initial mount) — same as the previous behavior.
@@ -105,7 +105,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       paintLines(ctx, lines, runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
       // Receipt: full canvas.
-      __w.__m510!.paints[__w.__m510!.paints.length - 1].px2 = width * height;
+      __w.__benchPaints!.paints[__w.__benchPaints!.paints.length - 1].px2 = width * height;
     }
 
     prevLinesRef.current = lines;

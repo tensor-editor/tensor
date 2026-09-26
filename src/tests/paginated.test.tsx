@@ -31,7 +31,7 @@ async function settle() {
   await settleLayout();
 }
 
-describe('M4 PaginatedView integration', () => {
+describe('PaginatedView integration', () => {
   it('a. multi-page doc renders N sheets, contiguity passes', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     renderTensor(threePageDoc);
@@ -125,7 +125,7 @@ describe('M4 PaginatedView integration', () => {
     const firstBlockOnPage2 = page2.querySelector('canvas') as HTMLElement;
     expect(firstBlockOnPage2).not.toBeNull();
     expect(firstBlockOnPage2.style.top).toBe(`${GEOMETRY.contentY}px`);
-    // The synthetic caret followed the selection into page 2. M4.2: the
+    // The synthetic caret followed the selection into page 2. The
     // caret is a stack-level sibling of the sheets (shared caretStackRect
     // math) — page 2 line 0 sits at 1*(1056+32) + 96 = 1184px stack-local.
     const caret = document.querySelector('[data-testid="synthetic-caret"]') as HTMLElement;

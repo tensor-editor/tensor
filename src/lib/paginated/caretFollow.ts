@@ -2,7 +2,7 @@ import { getScrollParent } from '@/lib/editor/domUtils';
 import type { CaretStackRect } from './positionMap';
 
 /**
- * THE SCROLL SPEC (M4.2 — minimal-edge caret-follow, engine-driven):
+ * THE SCROLL SPEC (minimal-edge caret-follow, engine-driven):
  *
  *   Scroll moves ONLY when a caret motion would clip the caret, and then
  *   only by the minimal delta that reveals it. No snapping, no

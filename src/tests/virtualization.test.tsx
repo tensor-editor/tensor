@@ -5,9 +5,9 @@ import { renderTensorInScrollContainer, GEOMETRY } from './harness';
 import { settleLayout } from './harness';
 
 /**
- * M5.6 STEP 1 — virtualization: canvases mount only for visible pages
- * ± 1 buffer (IntersectionObserver on the always-mounted sheets), and
- * STEP 6 — the status bar's current page is VIEWPORT based. Structural
+ * Virtualization: canvases mount only for visible pages
+ * ± 1 buffer (IntersectionObserver on the always-mounted sheets), and the
+ * status bar's current page is VIEWPORT based. Structural
  * assertions, not ms thresholds. The jsdom IO stub (setup.ts) fires
  * everything as visible by default; these tests disable auto-fire and
  * drive the observer by hand.
@@ -55,7 +55,7 @@ afterEach(() => {
   io().auto = true;
 });
 
-describe('M5.6 STEP 1: virtualization', () => {
+describe('virtualization', () => {
   it('canvases mount only for visible ± 1 buffer pages; sheets always mount', async () => {
     const { editor } = renderTensorInScrollContainer(fivePageDoc);
     await settleLayout();
@@ -89,7 +89,7 @@ describe('M5.6 STEP 1: virtualization', () => {
   });
 });
 
-describe('M5.6 STEP 6: viewport-based current page', () => {
+describe('viewport-based current page', () => {
   it('the highest-ratio sheet is the status bar page, not the caret page', async () => {
     renderTensorInScrollContainer(fivePageDoc);
     await settleLayout();
@@ -108,7 +108,7 @@ describe('M5.6 STEP 6: viewport-based current page', () => {
   });
 });
 
-describe('M5.6 STEP 3: dirty-block repaint', () => {
+describe('dirty-block repaint', () => {
   it('a mid-doc keystroke repaints only the edited block (paint-ops proof)', async () => {
     const { editor } = renderTensorInScrollContainer('<p>one</p><p>two</p><p>three</p>');
     await settleLayout();

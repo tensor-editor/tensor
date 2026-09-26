@@ -12,7 +12,7 @@ function topLevelIds(doc: PMNode): Array<string | null> {
   return ids;
 }
 
-describe('M4 STEP 1: BlockIdExtension', () => {
+describe('BlockIdExtension', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });

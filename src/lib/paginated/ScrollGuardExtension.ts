@@ -4,7 +4,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { useConfigStore } from '@/lib/config/store';
 
 /**
- * M4.2 translation layer, PM side. PM's view.scrollToSelection() fires
+ * PM-side translation layer. PM's view.scrollToSelection() fires
  * only for transactions carrying PM's scrollIntoView intent flag, and
  * consults handleScrollToSelection BEFORE its native default — which
  * would scrollIntoView the selection's coordsAtPos rect on the HIDDEN

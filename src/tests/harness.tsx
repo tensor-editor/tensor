@@ -6,7 +6,7 @@ import { FakeMetrics } from './fakeMetrics';
 
 /** Renders the REAL production <Editor/> (tensorExtensions, mode routing,
  * PaginatedView) with deterministic FakeMetrics injected through the
- * STEP 3 seam, optionally replacing the document content. */
+ * metrics seam, optionally replacing the document content. */
 export function renderTensor(initialHTML?: string) {
   const utils = render(<Editor metrics={FakeMetrics} />);
   const editor = useDocumentStore.getState().editor;
@@ -94,12 +94,12 @@ export function dataEvent(type: string, payload: { clipboardData?: DataTransfer;
 }
 
 /**
- * M5.9 STEP 3: version-stability settle — waits until the engine's
+ * Version-stability settle — waits until the engine's
  * layout version (data-layout-version on the stack) stops advancing for
  * two consecutive microtask+timeout cycles, or times out. Works
  * identically under the synchronous-first path (immediate) and the
  * coalesced rAF path (one extra frame). Replaces the fixed 20ms
- * timeouts the M5.7 coalescer forced onto the suite.
+ * timeouts the old coalescer forced onto the suite.
  */
 export async function settleLayout(timeoutMs = 200): Promise<void> {
   const version = () =>

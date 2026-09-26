@@ -8,7 +8,7 @@ import {
 import { useDocumentPropertiesStore } from '@/lib/document/propertiesStore';
 
 /**
- * Review > Document Properties (M5.13): reserved for document
+ * Review > Document Properties: reserved for document
  * metadata (title, author, tags). The page-setup controls that used
  * to live here moved to the Layout tab; statistics live in Review >
  * Document Statistics.

@@ -2,7 +2,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import type { LayoutResult, LineBox, TextMetrics } from '@tensor-editor/engine';
 import type { AdapterBlock } from './adapter';
 
-// THE PRINCIPLE (M5): all selection state changes go through PM
+// THE PRINCIPLE: all selection state changes go through PM
 // transactions — the shell never tracks its own selection. The painted
 // selection, search highlights, caret, and toolbar are projections of
 // PM state, exactly as tracks are a projection of the doc.
@@ -100,7 +100,7 @@ export function lineOffsetX(
 
 /** PM range -> per-line painted rects: partial x-range on the selection's
  * first/last line, full content width on middle lines. Stack-local,
- * pre-zoom — the caller renders inside the transform (M4.2 law: no
+ * pre-zoom — the caller renders inside the transform (zoom law: no
  * compensation). */
 export function textRangeLineRects(
   blocks: readonly AdapterBlock[],
@@ -188,7 +188,7 @@ export interface CaretStackRect {
 }
 
 /** Caret/caret-like rect in stack-local px: page stack offset + content
- * box + LineBox rect. Shared by the caret painter and the M4.2
+ * box + LineBox rect. Shared by the caret painter and the
  * caret-follow scroll — one source of this arithmetic. */
 export function caretStackRect(
   caret: CaretGeometry,

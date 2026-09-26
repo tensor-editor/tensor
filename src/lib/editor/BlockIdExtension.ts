@@ -4,7 +4,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { nanoid } from 'nanoid';
 
 /**
- * STEP 1 (M4): author-assigned, stable block ids on every top-level
+ * Author-assigned, stable block ids on every top-level
  * paragraph/heading. The engine's LineBox/FragmentBreak records carry
  * `blockId` as the edit-survival identity ("author-assigned, stable
  * across edits by contract" — engine/src/types.ts), and its caches are

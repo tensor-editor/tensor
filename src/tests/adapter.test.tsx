@@ -7,12 +7,12 @@ import { settleLayout } from './harness';
 const BASE = { fontFamily: 'system-ui', fontSize: 16 };
 
 /**
- * M5.6 STEP 2 — the identity cache contract: a mid-document keystroke
+ * The identity cache contract: a mid-document keystroke
  * leaves untouched blocks' semantic Block objects REFERENCE-IDENTICAL
- * (which is exactly what the engine's hash identity cache — SESSION E —
- * keys on). Positions (from/to) are exempt: they shift with siblings.
+ * (which is exactly what the engine's hash identity cache keys
+ * on). Positions (from/to) are exempt: they shift with siblings.
  */
-describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
+describe('incremental adapter (reference reuse)', () => {
   it('same doc, same baseStyle -> all blocks reference-identical', async () => {
     const { editor } = renderTensorInScrollContainer('<p>one</p><p>two</p><p>three</p>');
     await settleLayout();
@@ -83,7 +83,7 @@ describe('M5.6 STEP 2: incremental adapter (reference reuse)', () => {
   });
 
   it('font family on the textStyle mark is extracted (tiptap v3 global attribute)', async () => {
-    // M5.6 STEP 4 receipt: the family used to be read from a standalone
+    // Receipt: the family used to be read from a standalone
     // 'fontFamily' mark that tiptap v3 never creates.
     const { editor } = renderTensorInScrollContainer('<p>styled words</p>');
     await settleLayout();

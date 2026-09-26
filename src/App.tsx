@@ -24,7 +24,7 @@ function App() {
   useMenuEvents();
   useAppShortcuts();
 
-  // M5.8 differential benchmark. Triggers: URL #bench/?bench, OR five
+  // Differential benchmark. Triggers: URL #bench/?bench, OR five
   // rapid clicks on the StatusBar (mouse-only driving — the test box's
   // keyboard injection is unreliable). Output goes to a visible <pre>
   // (readable via AT-SPI from the WebKitGTK app) + console.
@@ -32,7 +32,7 @@ function App() {
     const mark = (s: string) => {
       document.title = s.slice(0, 150);
     };
-    // M5.8 measurement channel: write results into $APPDATA via the fs
+    // Measurement channel: write results into $APPDATA via the fs
     // plugin — readable from the shell regardless of a11y/console/title.
     const writeResult = async (text: string, suffix = '') => {
       try {
@@ -66,7 +66,7 @@ function App() {
         // Global for browser drivers (Brave/Chromium collect via CDP).
         (globalThis as { __benchResult?: unknown }).__benchResult = { small, big };
         const text =
-          '=== M5.10 DIFFERENTIAL ===\n' + fb(small) + '\n' + fb(big);
+          '=== DIFFERENTIAL ===\n' + fb(small) + '\n' + fb(big);
         await writeResult(text);
         // eslint-disable-next-line no-console
         console.log(text);
@@ -108,7 +108,7 @@ function App() {
       <main className="flex h-screen flex-col bg-background text-foreground">
         <Ribbon />
         <div className="relative flex-1 overflow-hidden">
-          {/* M4.1 desk: the editor scroll surface — the muted token reads
+          {/* Desk: the editor scroll surface — the muted token reads
               as the classic gray desk in light mode and adapts in dark. */}
           <div className="absolute inset-0 overflow-auto bg-muted pt-6 pb-6">
             <Editor />

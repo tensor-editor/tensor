@@ -1,5 +1,5 @@
 /**
- * M5.10 differential benchmark — Tensor-vs-Tensor across engines.
+ * Differential benchmark — Tensor-vs-Tensor across engines.
  * Activates on #bench/?bench, BENCH_AUTO builds, or the 5-click
  * StatusBar trigger; readable in ANY renderer (file channel in Tauri,
  * <pre>/globals in plain browsers).
@@ -10,7 +10,7 @@
  *    gap is the passive-effect ghost candidate.
  *  - burst: 20 dispatches back-to-back — per-dispatch PM view.update
  *    duration (the hidden view's DOM-sync cost, doc-size dependent).
- *  - branch: __m59sync counters — did sync-first fire, or defer to rAF?
+ *  - branch: __benchSync counters — did sync-first fire, or defer to rAF?
  */
 
 import type { Editor } from '@tiptap/core';
@@ -63,13 +63,13 @@ export async function runBench(editor: Editor, docHtml: string, label: string): 
   await new Promise((r) => setTimeout(r, 600));
 
   const g = globalThis as {
-    __m567?: { relayouts: Array<{ total: number; at: number }> };
-    __m510?: { paints: Array<{ at: number; blockId: string }> };
-    __m59sync?: { sync: number; deferred: number };
+    __benchRelayouts?: { relayouts: Array<{ total: number; at: number }> };
+    __benchPaints?: { paints: Array<{ at: number; blockId: string }> };
+    __benchSync?: { sync: number; deferred: number };
   };
-  g.__m567 = { relayouts: [] };
-  g.__m510 = { paints: [] };
-  g.__m59sync = { sync: 0, deferred: 0 };
+  g.__benchRelayouts = { relayouts: [] };
+  g.__benchPaints = { paints: [] };
+  g.__benchSync = { sync: 0, deferred: 0 };
 
   const longTasks: { duration: number; name: string }[] = [];
   const po = new PerformanceObserver((list) => {
@@ -97,8 +97,8 @@ export async function runBench(editor: Editor, docHtml: string, label: string): 
     const raf2 = await new Promise<number>((r) => requestAnimationFrame(r));
     browserFrameMs.push(raf2 - raf1);
 
-    const rel = g.__m567!.relayouts.find((e) => e.at >= inputAt - 0.5);
-    const paint = g.__m510!.paints.find((e) => e.at >= inputAt - 0.5);
+    const rel = g.__benchRelayouts!.relayouts.find((e) => e.at >= inputAt - 0.5);
+    const paint = g.__benchPaints!.paints.find((e) => e.at >= inputAt - 0.5);
     if (rel) {
       relayoutMs.push(rel.total);
       chainRelayout.push(rel.at - inputAt);
@@ -108,8 +108,8 @@ export async function runBench(editor: Editor, docHtml: string, label: string): 
   }
 
   // --- Burst phase: 20 dispatches back-to-back in one task ---
-  g.__m567!.relayouts.length = 0;
-  g.__m510!.paints.length = 0;
+  g.__benchRelayouts!.relayouts.length = 0;
+  g.__benchPaints!.paints.length = 0;
   const burstViewUpdate: number[] = [];
   const burstStart = performance.now();
   for (let i = 0; i < 20; i++) {
@@ -118,7 +118,7 @@ export async function runBench(editor: Editor, docHtml: string, label: string): 
     burstViewUpdate.push(performance.now() - t0);
   }
   await new Promise((r) => setTimeout(r, 200)); // let deferred + coalesced land
-  const burstRelayouts = g.__m567!.relayouts;
+  const burstRelayouts = g.__benchRelayouts!.relayouts;
   const drainMs = burstRelayouts.length
     ? burstRelayouts[burstRelayouts.length - 1]!.at - burstStart
     : -1;
@@ -144,7 +144,7 @@ export async function runBench(editor: Editor, docHtml: string, label: string): 
       drainMs: +drainMs.toFixed(1),
       relayouts: burstRelayouts.length,
     },
-    branch: { ...g.__m59sync! },
+    branch: { ...g.__benchSync! },
     longTasks: longTasks.filter((t) => t.duration > 10).slice(-8),
     hiddenViewNodes: hidden ? hidden.querySelectorAll('*').length : 0,
   };

@@ -10,7 +10,7 @@ import { useDocumentStore } from '@/lib/document/store';
 import { getDocumentStats } from '@/lib/editor/documentStats';
 
 /**
- * Review > Document Statistics (M5.13): read-only document
+ * Review > Document Statistics: read-only document
  * information — file, pages, words, characters.
  */
 export function DocumentStatisticsDialog() {

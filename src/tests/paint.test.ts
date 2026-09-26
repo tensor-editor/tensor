@@ -5,7 +5,7 @@ import { paintLines } from '@/lib/paginated/paint';
 import { alignOffset } from '@/lib/paginated/positionMap';
 import { FakeMetrics } from './fakeMetrics';
 
-/** M5.5 STEP 6 — paint fidelity: exact underline/strike y, highlight
+/** Paint fidelity: exact underline/strike y, highlight
  * rect, colored fillStyle, and the shared alignOffset, asserted against
  * a recording ctx. All math is FakeMetrics-deterministic: ascent
  * 0.8*fontSize, descent 0.2*fontSize, 10px/char. */
@@ -58,7 +58,7 @@ function paint(decor: RunDecor[], align: 'left' | 'center' | 'right' = 'left') {
   return ctx;
 }
 
-describe('M5.5 paint: marks', () => {
+describe('paint: marks', () => {
   it('underlines at ~0.08em below the baseline, exact y and thickness', () => {
     const ctx = paint([{ underline: true }]);
     const ul = ctx.ops.find((o) => o.op === 'fillRect');
@@ -103,7 +103,7 @@ describe('M5.5 paint: marks', () => {
     expect(ctx.font).toBe('italic 700 16px Test Sans');
   });
 
-  it('M5.6 STEP 4: a monospace-family block paints with the family in ctx.font', () => {
+  it('a monospace-family block paints with the family in ctx.font', () => {
     const ctx = makeCtx();
     const monoRuns: Run[] = [
       { text: 'code', style: { ...STYLE, fontFamily: 'monospace' } },
@@ -125,7 +125,7 @@ describe('M5.5 paint: marks', () => {
   });
 });
 
-describe('M5.5 paint: alignment (one shared offset)', () => {
+describe('paint: alignment (one shared offset)', () => {
   it('alignOffset: left 0, center (cw-lw)/2, right cw-lw', () => {
     expect(alignOffset('left', 80, 624)).toBe(0);
     expect(alignOffset('center', 80, 624)).toBe(272);

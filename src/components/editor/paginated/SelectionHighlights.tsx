@@ -3,7 +3,7 @@ import { withAlpha } from '@/lib/colorFormat';
 
 /** Projection of PM's selection (one div per line, partial x on the
  * selection's first/last line, full width on middles). Inside the zoom
- * transform — no compensation, per the M4.2 law. `color` is the user's
+ * transform — no compensation, per the zoom law. `color` is the user's
  * configured selection background (config.editor.selectionColor); absent
  * = the theme primary at selection opacity. A configured color always
  * paints at SELECTION_ALPHA so text under it stays readable. */

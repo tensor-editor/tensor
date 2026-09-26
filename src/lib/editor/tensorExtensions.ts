@@ -61,10 +61,10 @@ export function tensorExtensions(): Extensions {
     SearchExtension,
     DynamicShortcutsExtension,
     // Model node that survives from the legacy pipeline: the pageBreak
-    // atom renders its marker, and the M4 adapter translates it into the
+    // atom renders its marker, and the adapter translates it into the
     // engine's forced-break spelling (flow.breakBefore: 'page').
     PageBreakNode,
-    // M4: stable block ids (engine edit-survival contract) + the
+    // Stable block ids (engine edit-survival contract) + the
     // paginated-mode scroll guard (L3).
     BlockIdExtension,
     ScrollGuardExtension,

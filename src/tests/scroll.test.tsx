@@ -8,7 +8,7 @@ import { renderTensorInScrollContainer, mockRects, captureScroll, GEOMETRY } fro
 import { settleLayout } from './harness';
 
 /**
- * M4.2 STEP 4 — scroll policy, exact deltas. jsdom lays out nothing, so
+ * Scroll policy, exact deltas. jsdom lays out nothing, so
  * the two inputs the scroll math reads (stack rect, scroller rect) are
  * mocked per test with KNOWN numbers, and scrollTop is captured through a
  * defineProperty backing variable (jsdom's scrollTop has no layout to
@@ -70,7 +70,7 @@ beforeEach(() => {
   }));
 });
 
-describe('M4.2 scroll policy (minimal-edge caret-follow)', () => {
+describe('scroll policy (minimal-edge caret-follow)', () => {
   it('a. REGRESSION PIN: caret visible, typing at a page boundary -> scrollTop byte-identical', async () => {
     const { editor } = renderTensorInScrollContainer(twoPageDoc);
     await settle();

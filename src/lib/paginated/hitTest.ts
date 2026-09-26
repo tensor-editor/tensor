@@ -2,7 +2,7 @@ import type { LayoutResult, TextMetrics } from '@tensor-editor/engine';
 import type { AdapterBlock } from './adapter';
 import { alignOffset } from './positionMap';
 
-// THE NEAREST-LINE RULE (M5, from the legacy dead-zone fixtures): clicks
+// THE NEAREST-LINE RULE (from the legacy dead-zone fixtures): clicks
 // resolve to the nearest line WITHIN the nearest sheet — a click in a
 // page margin or the inter-sheet gap clamps to that sheet's nearest
 // line, and x beyond a line's end resolves to that line's end position.

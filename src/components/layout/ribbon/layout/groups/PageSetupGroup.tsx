@@ -9,7 +9,7 @@ import { useDocumentPropertiesStore } from '@/lib/document/propertiesStore';
 import { PAGE_SIZES } from '@/lib/document/pageSetup';
 
 /**
- * Layout tab > Page Setup (M5.13): paper size (with custom), orientation,
+ * Layout tab > Page Setup: paper size (with custom), orientation,
  * page background, and margins — all writing useDocumentStore.setPageSetup,
  * which persists via .wpdoc metadata and reflows the document
  * immediately (L4: pageSetup is read per layout call).

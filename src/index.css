@@ -106,7 +106,7 @@ body {
   margin-top: 0 !important;
 }
 
-/* THE INPUT-ONLY VIEW (M4 law L3): the hidden PM view receives keyboard
+/* THE INPUT-ONLY VIEW (law L3): the hidden PM view receives keyboard
    input and holds the model selection; nothing about it is ever
    measured, painted, or positioned from. Native caret and selection
    are invisible BY DESIGN — the synthetic caret and painted sheets own
@@ -115,7 +115,7 @@ body {
   caret-color: transparent;
 }
 
-/* M5.8 F1: content-visibility on the hidden view's blocks — the input-only
+/* content-visibility on the hidden view's blocks — the input-only
    view renders the full document (opacity 0), but its DOM still costs
    browser LAYOUT on every keystroke. WebKitGTK showed browserFrame p95
    38ms (BIG) vs 17ms (SMALL) — the hidden doc's layout is implicated.
@@ -133,7 +133,7 @@ body {
   background: transparent;
 }
 
-/* M5.9 STEP 2: caret blink — SOLID by default, blinks after 500ms idle
+/* caret blink — SOLID by default, blinks after 500ms idle
    via .tensor-caret-blinking (PaginatedView controls the phase). Hidden
    entirely during non-collapsed selections and on window blur. */
 .tensor-caret {

@@ -11,7 +11,7 @@ import type { TextAlign } from './positionMap';
 export type { TextAlign } from './positionMap';
 
 /**
- * STEP 2 (M4): PM doc -> engine SemanticDoc. Pure conversion, no
+ * PM doc -> engine SemanticDoc. Pure conversion, no
  * measurement, no DOM reads (L1: the engine computes, never paints; the
  * shell paints, never computes — this is the shell->engine handoff).
  *
@@ -39,7 +39,7 @@ export interface AdapterBlock {
   from: number;
   to: number;
   /** Block-level text alignment, from PM's textAlign attr. 'justify' is
-   * engine work (explicitly out of the M5.5 shell scope) and stays in
+   * engine work (explicitly out of the shell scope) and stays in
    * the dropped-attr warning list. */
   align: TextAlign;
   /** Visual mark props per run (parallel to `runs`, indexed by the
@@ -64,7 +64,7 @@ export interface AdapterResult {
 
 /**
  * Level-based default styles arrive from the ADAPTER, never the engine
- * (engine TODO(M4), layout.ts: "level is not a layout input here").
+ * (engine layout.ts: "level is not a layout input here").
  * Word-approximate multiples of the 16px base.
  */
 const HEADING_DEFAULTS: Record<number, { fontSize: number; bold: true }> = {
@@ -77,22 +77,22 @@ const HEADING_DEFAULTS: Record<number, { fontSize: number; bold: true }> = {
 };
 
 // Dropped-attr policy: these PM attributes/marks have no representation
-// in the M4 semantic doc. NEVER silent — one dev warning per distinct
+// in the semantic doc. NEVER silent — one dev warning per distinct
 // dropped-set (enumerating them), not per block and not per occurrence.
-// Painted-since-M5.5 (runDecor/align, NOT dropped): color, highlight,
+// Painted (runDecor/align, NOT dropped): color, highlight,
 // underline, strike, textAlign left/center/right.
 const warnedDroppedSignatures = new Set<string>();
 
 const DEFAULT_HIGHLIGHT = '#fef08a';
 
 /**
- * M5.6 STEP 2 — the identity cache that makes the pipeline O(edit):
+ * The identity cache that makes the pipeline O(edit):
  * conversions are memoized on the PM NODE object. ProseMirror's
  * structural sharing guarantees a typing transaction rebuilds only the
  * edited node's path — sibling top-level nodes are the same object
  * references across doc versions — so unchanged blocks reuse their
  * semantic Block and AdapterBlock BY REFERENCE. That is exactly the
- * adapter contract the engine's hash identity cache (M5.6 SESSION E)
+ * adapter contract the engine's hash identity cache
  * is keyed on: reference-stable blocks → zero re-hashing, zero
  * re-conversion. PM nodes are immutable: a CHANGED paragraph is a new
  * object, which misses here and reconverts. A baseStyle change
@@ -116,7 +116,7 @@ function warnDroppedAttrs(dropped: Set<string>): void {
   if (warnedDroppedSignatures.has(signature)) return;
   warnedDroppedSignatures.add(signature);
   console.warn(
-    `[adapter] attributes present but dropped by the M4 semantic doc: ${signature}. ` +
+    `[adapter] attributes present but dropped by the semantic doc: ${signature}. ` +
       'Layout ignores them; they are preserved in the PM document and re-appear in .wpdoc saves.'
   );
 }
@@ -169,7 +169,7 @@ function convertNode(
     if (!child.isText || !child.text) {
       throw new Error(
         `[adapter] unsupported inline node '${child.type.name}' inside ${kind}: ` +
-          'the M4 engine has no inline-break model (hardBreak included)'
+          'the engine has no inline-break model (hardBreak included)'
       );
     }
 
@@ -259,9 +259,9 @@ export function pmDocToSemantic(pm: PMNode, baseStyle: TextStyle): AdapterResult
 
     if (kind !== 'paragraph' && kind !== 'heading') {
       throw new Error(
-        `[adapter] unsupported block kind '${kind}' at offset ${offset}: the M4 engine ` +
+        `[adapter] unsupported block kind '${kind}' at offset ${offset}: the engine ` +
           'handles paragraph/heading only (blockquote, codeBlock, bulletList, orderedList, ' +
-          'horizontalRule are deliberate loud throws until their milestones)'
+          'horizontalRule are deliberate loud throws until the engine supports them)'
       );
     }
 

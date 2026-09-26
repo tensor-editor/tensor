@@ -1,9 +1,9 @@
 import type { TextMetrics, TextStyle } from '@tensor-editor/engine';
 
 /**
- * THE ONE-RULER RULE (M4 proposal): ONE RealMetrics instance is the app's
+ * THE ONE-RULER RULE: ONE RealMetrics instance is the app's
  * single measurement authority. The engine's line/walk caches are keyed on
- * block content and never invalidated by metrics identity (M3 consequence:
+ * block content and never invalidated by metrics identity (consequence:
  * "new metrics requires a new engine") — so a second, differently-warm
  * metrics instance paired with a cached engine would silently produce
  * parity-violating layout. Paint (fillText positioning) goes through the

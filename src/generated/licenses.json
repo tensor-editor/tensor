@@ -540,6 +540,12 @@
     "repository": "https://github.com/tauri-apps/plugins-workspace"
   },
   {
+    "name": "@tensor-editor/engine",
+    "version": "0.0.1",
+    "license": "AGPL-3.0-only",
+    "repository": null
+  },
+  {
     "name": "@tiptap/core",
     "version": "3.31.3",
     "license": "MIT",

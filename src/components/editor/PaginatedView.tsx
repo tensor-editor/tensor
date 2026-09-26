@@ -39,17 +39,16 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { TooltipProvider } from '../ui/tooltip';
 
 /**
- * M4 PaginatedView — Tensor's default mode, first pixels.
+ * PaginatedView — Tensor's default mode, first pixels.
  *
- * THE LAWS (see also docs/legacy/pagination-v1.md for the legacy
- * disease each one cures):
+ * THE LAWS:
  *  L1: the engine computes, never paints; the shell paints, never
  *      computes. Every coordinate below is an engine-issued positioned
  *      fact (LineBox/PageGeometry); this file only adds container
  *      offsets (zoom stack, page gap, content box).
  *  L2: ONE engine instance + ONE RealMetrics instance, React refs, for
- *      the lifetime of this view. M3's caches live INSIDE the engine
- *      instance — remounting either throws away warm walk/line caches
+ *      the lifetime of this view. The engine's caches live INSIDE the
+ *      engine instance — remounting either throws away warm walk/line caches
  *      mid-session, and pairing a differently-warm metrics instance
  *      with a cached engine silently violates parity.
  *  L3: the hidden PM view is INPUT ONLY — never measured, never
@@ -64,11 +63,11 @@ import { TooltipProvider } from '../ui/tooltip';
  *
  * NO DEBOUNCE, NO rAF BY DESIGN: PM update -> adapter ->
  * engine.layout -> setState -> paint, synchronously in one React
- * commit. The seam that makes that affordable is the engine's M3
+ * commit. The seam that makes that affordable is the engine's
  * incremental cache (blocksSpliced/linesRebroken) — a keystroke
  * re-walks only the edited block and its dependents.
  *
- * M5: the selection overlay, search highlights, caret, floating
+ * The selection overlay, search highlights, caret, floating
  * toolbar, and IME preview are all PROJECTIONS of PM state (see
  * positionMap.ts — the principle). All selection changes go through
  * PM transactions.
@@ -107,7 +106,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
 
   const [layout, setLayout] = useState<LayoutState | null>(null);
   const [caret, setCaret] = useState<CaretGeometry | null>(null);
-  // M5.9 STEP 2: blink-phase — solid on any input, blinking after
+  // Blink-phase — solid on any input, blinking after
   // 500ms idle, hidden during non-collapsed selection and window blur.
   const [caretBlinking, setCaretBlinking] = useState(true);
   const [editorFocused, setEditorFocused] = useState(true);
@@ -122,8 +121,8 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const [searchPaint, setSearchPaint] = useState<SearchPaint | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
   const [adapterError, setAdapterError] = useState<Error | null>(null);
-  /** Pages whose canvases mount: viewport-visible ∪ ±1 buffer (M5.6
-   * STEP 1). Sheets ALWAYS mount — scroll extents are geometry-owned. */
+  /** Pages whose canvases mount: viewport-visible ∪ ±1 buffer.
+   * Sheets ALWAYS mount — scroll extents are geometry-owned. */
   const [visiblePages, setVisiblePages] = useState<Set<number> | null>(null);
   // Handlers below run inside PM's dispatch (outside React's render
   // cycle) — they read the fallback flag through this ref, not state.
@@ -186,10 +185,10 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       metricsRef.current!
     );
     setCaret(geom);
-    // M5.9 STEP 2: any input/selection motion resets the caret to solid;
+    // Any input/selection motion resets the caret to solid;
     // the 500ms idle timer starts blinking.
     resetCaretBlink();
-    // M5.6 STEP 6: the status bar's page is VIEWPORT based (the
+    // The status bar's page is VIEWPORT based (the
     // IntersectionObserver feed) — the caret no longer moves it.
     setPageInfo(current.result.pages.length, useDocumentStore.getState().currentPage);
     const rects = selection.empty
@@ -235,7 +234,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     setSearchPaint({ all, current: currentRects });
     if (st.currentIndex !== prevSearchIndexRef.current) {
       prevSearchIndexRef.current = st.currentIndex;
-      // Current-match navigation scrolls via the M4.2 minimal-edge follow.
+      // Current-match navigation scrolls via the minimal-edge follow.
       if (currentRects.length && stack) {
         const r = currentRects[0];
         scrollCaretIntoView(
@@ -260,15 +259,15 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
         fontSize: size,
       });
       const result = engineRef.current!.layout(adapted.doc, toLayoutOptions(pageSetupNow));
-      // Permanent benchmark seam (M5.8): total relayout time, readable
+      // Permanent benchmark seam: total relayout time, readable
       // by the self-driving bench and the coalescing test.
-      const __w = globalThis as { __m567?: { relayouts: Array<{ total: number; at: number }> } };
-      __w.__m567 ??= { relayouts: [] };
-      __w.__m567.relayouts.push({ total: performance.now() - __t0, at: performance.now() });
+      const __w = globalThis as { __benchRelayouts?: { relayouts: Array<{ total: number; at: number }> } };
+      __w.__benchRelayouts ??= { relayouts: [] };
+      __w.__benchRelayouts.relayouts.push({ total: performance.now() - __t0, at: performance.now() });
       assertContiguity(result);
       const next: LayoutState = { blocks: adapted.blocks, result };
       layoutRef.current = next;
-      // M5.12 STEP 3: no flushSync — React batches setLayout calls
+      // No flushSync — React batches setLayout calls
       // from N input events into ONE render + ONE useLayoutEffect paint
       // per frame (the "paint once per frame" model). For single keys,
       // the microtask render fires within the same frame; for bursts,
@@ -405,7 +404,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       return;
     }
 
-    // M5.6 STEP 5b: Ctrl/Cmd+click on a painted link opens it via the OS
+    // Ctrl/Cmd+click on a painted link opens it via the OS
     // (the committed legacy rule — plain click places the caret, the
     // bubble's Open button stays). Opened through the same plugin-opener
     // the bubble uses.
@@ -434,7 +433,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   // metrics identity, so pre-font-load measurement would cache
   // fallback-font widths for the whole session (see metrics.ts).
   //
-  // M4.2: the caret-follow TRIGGER is PM's own intent flag —
+  // The caret-follow TRIGGER is PM's own intent flag —
   // `transaction.scrolledIntoView` is set only by tr.scrollIntoView(),
   // which PM's key/input handling sets on caret motion; layout churn
   // alone dispatches no flagged transaction, so churn never scrolls.
@@ -482,7 +481,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       if (transaction.scrolledIntoView) pendingScrollRef.current = true;
     };
     const onDocUpdate = () => {
-      // M5.9 STEP 1: synchronous-first — adapter+engine+commit run in
+      // Synchronous-first — adapter+engine+commit run in
       // the input event's own task; text paints in the input's frame.
       // Over SYNC_BUDGET_PER_FRAME per ~16ms window, the coalescer
       // (rAF) takes over as the pressure valve.
@@ -544,7 +543,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     relayoutRef.current();
   }, [pageSetup, defaultFontFamily, defaultFontSize]);
 
-  // M5.6 STEP 1 + 6: one IntersectionObserver over all sheets. Visible
+  // One IntersectionObserver over all sheets. Visible
   // (±1 buffer) pages mount canvases; the sheet with the highest
   // intersection ratio is the status bar's current page — viewport
   // based, not caret based.
@@ -590,14 +589,14 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     if (el && ioRef.current) ioRef.current.observe(el);
   }, []);
 
-  // M5.9 STEP 1: synchronous-first. The relayout (adapter+engine+commit,
+  // Synchronous-first. The relayout (adapter+engine+commit,
   // 1-3.5ms) runs INLINE with the input event — text paints in the
   // input's own frame (the GDocs model). The rAF coalescer survives as
   // a pressure valve: after SYNC_BUDGET_PER_FRAME sync relayouts in
   // one ~16ms window (script/IME batch), further updates defer and
-  // coalesce. Threshold from M5.8 measurements: normal typing is 1
+  // coalesce. Measured: normal typing is 1
   // keystroke per frame, well under budget.
-  // M5.12 STEP 3: budget = Infinity — process ALL keys in their input
+  // Budget = Infinity — process ALL keys in their input
   // events, paint once per frame (React batches setLayout calls from
   // N input events into one render). Stagger dies by construction.
   const SYNC_BUDGET_PER_FRAME = Infinity;
@@ -627,24 +626,24 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       b.count = 0;
       b.frameStart = now;
     }
-    // Benchmark seam (M5.10 STEP 0a): which branch fired.
-    const t = globalThis as { __m59sync?: { sync: number; deferred: number } };
-    t.__m59sync ??= { sync: 0, deferred: 0 };
+    // Benchmark seam: which branch fired.
+    const t = globalThis as { __benchSync?: { sync: number; deferred: number } };
+    t.__benchSync ??= { sync: 0, deferred: 0 };
     if (b.count < SYNC_BUDGET_PER_FRAME) {
       b.count += 1;
-      t.__m59sync.sync += 1;
+      t.__benchSync.sync += 1;
       relayoutRef.current();
       return;
     }
     // Over budget — defer to the coalescer (rAF).
-    t.__m59sync.deferred += 1;
+    t.__benchSync.deferred += 1;
     scheduleCoalescedRelayoutRef.current();
   }, []);
   const trySyncOrDeferRef = useRef(trySyncOrDeferRelayout);
   trySyncOrDeferRef.current = trySyncOrDeferRelayout;
 
   // Group lines per page per block, document order — MEMOIZED on the
-  // LayoutResult reference (M5.6 STEP 3): a stable result yields stable
+  // LayoutResult reference: a stable result yields stable
   // group objects, so memoized BlockCanvases skip re-render entirely on
   // unrelated state changes; a relayout (new result) rebuilds groups and
   // only blocks with new LineBox references repaint (the engine shares
@@ -669,7 +668,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     return map;
   }, [layout]);
 
-  // M4.2 caret-follow registration: block PM's native
+  // Caret-follow registration: block PM's native
   // scroll-to-selection (L3) and decline only in the adapter fallback,
   // where the visible pageless DOM is the real content.
   useEffect(() => {
@@ -678,7 +677,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     return () => setPaintedScrollHandler(null);
   }, [editor]);
 
-  // M5.9 STEP 2: editor focus/blur hides the caret entirely.
+  // Editor focus/blur hides the caret entirely.
   useEffect(() => {
     if (!editor) return;
     const onBlur = () => setEditorFocused(false);
@@ -692,7 +691,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     };
   }, [editor]);
 
-  // IME composition preview (M5 STEP 7). The one sanctioned L3
+  // IME composition preview. The one sanctioned L3
   // exception: composition text is INPUT STATE read from events on the
   // hidden view, never geometry — PM keeps the in-progress string out
   // of the doc model until compositionend, so the engine can't paint
@@ -926,12 +925,12 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
 }
 
 /**
- * L3's physical form — and M4.2's structural fix ("kill Suspect B"):
+ * L3's physical form — the structural fix ("kill Suspect B"):
  * the hidden PM view is portaled to document.body and positioned FIXED,
  * a sibling of the App scroller rather than a descendant. Nothing
  * inside a scroll container can be scroll-triggered by it. The
  * contenteditable itself is untouched — keyboard input, IME, and the
- * model selection all live here. NOT aria-hidden (M5 a11y): opacity 0
+ * model selection all live here. NOT aria-hidden (a11y): opacity 0
  * keeps it in the accessibility tree, which is exactly where screen
  * readers should find the editable text.
  */

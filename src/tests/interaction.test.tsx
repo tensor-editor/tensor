@@ -21,7 +21,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
 }));
 
 /**
- * M5 interactions, all through the REAL production Editor: the selection
+ * Interactions, all through the REAL production Editor: the selection
  * overlay, mouse selection, the legacy dead-zone fixtures (ported from
  * docs/legacy/pagination-v1.md, preserved in git history), toolbar,
  * search paint, clipboard, and IME preview. jsdom geometry:
@@ -73,7 +73,7 @@ beforeEach(() => {
   }));
 });
 
-describe('M5 STEP 1: selection overlay (projection of PM selection)', () => {
+describe('selection overlay (projection of PM selection)', () => {
   it('non-empty selection paints partial-line x exactly', async () => {
     const { editor } = renderTensorInScrollContainer('<p>Hello world</p>');
     await settle();
@@ -135,7 +135,7 @@ describe('M5 STEP 1: selection overlay (projection of PM selection)', () => {
   });
 });
 
-describe('M5 STEP 2: mouse selection', () => {
+describe('mouse selection', () => {
   it('mousedown resolves via hitTest and collapses the selection', async () => {
     const { editor } = renderTensorInScrollContainer('<p>Hello world</p>');
     await settle();
@@ -192,7 +192,7 @@ describe('M5 STEP 2: mouse selection', () => {
   });
 });
 
-describe('M5 STEP 2b: legacy dead-zone fixtures (nearest-line rule)', () => {
+describe('legacy dead-zone fixtures (nearest-line rule)', () => {
   // 'Hi' (1 line), forced break, 'Next' on page 2.
   // PM layout: Hi [0,4), pageBreak [4,5), Next [5,10) text at 6.
   const breakDoc = '<p>Hi</p><div data-page-break="true"></div><p>Next</p>';
@@ -245,7 +245,7 @@ describe('M5 STEP 2b: legacy dead-zone fixtures (nearest-line rule)', () => {
   });
 });
 
-describe('M5 STEP 5: floating toolbar at engine coords', () => {
+describe('floating toolbar at engine coords', () => {
   it('positions from the selection bounding box, not hidden-DOM coords', async () => {
     const { editor } = renderTensorInScrollContainer('<p>Hello world</p>');
     await settle();
@@ -263,7 +263,7 @@ describe('M5 STEP 5: floating toolbar at engine coords', () => {
   });
 });
 
-describe('M5 STEP 4: search paint + minimal-edge current-match scroll', () => {
+describe('search paint + minimal-edge current-match scroll', () => {
   it('paints matches and scrolls the current match by the exact delta', async () => {
     // 'Tensor' opens page 1 and page 3.
     const a = `Tensor${'a'.repeat(CHARS * LINES - 6)}`;
@@ -296,7 +296,7 @@ describe('M5 STEP 4: search paint + minimal-edge current-match scroll', () => {
   });
 });
 
-describe('M5 STEP 3: clipboard (PM\u2019s own handlers)', () => {
+describe('clipboard (PM\u2019s own handlers)', () => {
   it('copy captures the selection; paste inserts plain text', async () => {
     const { editor } = renderTensorInScrollContainer('<p>Hello world</p>');
     await settle();
@@ -390,7 +390,7 @@ describe('M5 STEP 3: clipboard (PM\u2019s own handlers)', () => {
   });
 });
 
-describe('M5.5: alignment symmetry + selection color + cursor', () => {
+describe('alignment symmetry + selection color + cursor', () => {
   const paintOps = () => (globalThis as { __paintOps?: Array<{ op: string; args: unknown[] }> }).__paintOps ?? [];
 
   it('centered line: painted x, caret x, and margin-click all use the one offset', async () => {
@@ -450,7 +450,7 @@ describe('M5.5: alignment symmetry + selection color + cursor', () => {
     await settle();
     r = selRects()[0]!;
     // The picked color paints with the automatic alpha so the text under
-    // the selection stays readable (STEP 7).
+    // the selection stays readable.
     expect(r.style.backgroundColor).toBe('rgba(59, 130, 246, 0.35)');
     expect(r.className).not.toContain('bg-primary/25');
 
@@ -510,7 +510,7 @@ describe('M5.5: alignment symmetry + selection color + cursor', () => {
   });
 });
 
-describe('M5 STEP 6/7: a11y attrs + IME composition preview', () => {
+describe('a11y attrs + IME composition preview', () => {
   it('hidden view is NOT aria-hidden; canvases are presentation', async () => {
     renderTensorInScrollContainer('<p>Hello</p>');
     await settle();

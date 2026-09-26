@@ -12,10 +12,10 @@ interface PageSheetProps {
   children: ReactNode;
 }
 
-/** STEP 4: one absolutely-positioned sheet per PageGeometry. All painted
+/** One absolutely-positioned sheet per PageGeometry. All painted
  * children live inside the scaled stack, so nothing compensates for zoom.
  *
- * M4.1 paper visuals — styling only: white paper (or the document's
+ * Paper visuals — styling only: white paper (or the document's
  * pageColor via the background prop), 1px border-border, shadow-lg,
  * 6px radius. Every DIMENSION still comes from engine geometry. */
 export function PageSheet({ geometry, top, observeRef, background, children }: PageSheetProps) {
