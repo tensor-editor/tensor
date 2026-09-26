@@ -153,6 +153,8 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const defaultFontSize = useConfigStore((s) => s.config.editor.defaultFontSize);
   const zoomLevel = useConfigStore((s) => s.config.editor.zoomLevel);
   const showFloatingToolbar = useConfigStore((s) => s.config.useFloatingToolbar);
+  // Display-only ink (M6): NPCs paint on screen; never a layout fact.
+  const showNonPrintingChars = useConfigStore((s) => s.config.editor.showNonPrintingChars);
   const selectionColor = useConfigStore((s) => s.config.editor.selectionColor);
   const setPageInfo = useDocumentStore((s) => s.setPageInfo);
 
@@ -840,6 +842,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                         width={page.contentBox.width}
                         align={block.align}
                         runDecor={block.runDecor}
+                        npc={showNonPrintingChars}
                       />
                     );
                   })}

@@ -28,6 +28,8 @@ export const SHORTCUTS: ShortcutDefinition[] = [
   { id: 'underline', label: 'Underline', keys: 'ctrl+u', context: 'editor', category: 'Formatting' },
   { id: 'strike', label: 'Strikethrough', keys: 'ctrl+shift+x', context: 'editor', category: 'Formatting' },
   { id: 'clearFormatting', label: 'Clear Formatting', keys: 'ctrl+\\', context: 'editor', category: 'Formatting' },
+  { id: 'fontSizeUp', label: 'Increase Font Size', keys: 'ctrl+shift+.', context: 'editor', category: 'Formatting' },
+  { id: 'fontSizeDown', label: 'Decrease Font Size', keys: 'ctrl+shift+,', context: 'editor', category: 'Formatting' },
 
   { id: 'insertLink', label: 'Hyperlink', keys: 'ctrl+k', context: 'editor', category: 'Insert' },
 
@@ -52,15 +54,31 @@ export function getEffectiveKeybinding(keybindings: Record<string, string>, id: 
   return keybindings[id] ?? def?.keys ?? '';
 }
 
+/** Shift-glyph aliases: pressing shift+period/comma produces the
+ * SHIFTED glyph in the key event ('>' / '<' on US layouts), so a
+ * binding spelled with the unshifted key ('ctrl+shift+.') must match
+ * the event's shifted glyph, and a recorded binding spelled with the
+ * shifted glyph ('ctrl+shift+>') must match layouts that deliver the
+ * unshifted key. Word documents these as Ctrl+Shift+> / Ctrl+Shift+<;
+ * the registry spells the physical keys, both match. */
+const SHIFT_GLYPH_ALIASES: Record<string, string> = {
+  '>': '.',
+  '<': ',',
+};
+
 export function matchesShortcut(e: KeyboardEvent, shortcut: string): boolean {
   if (!shortcut) return false;
   const parts = shortcut.toLowerCase().split('+');
   const key = parts.pop();
+  if (key == null) return false;
+  const eventKey = e.key.toLowerCase();
   return (
     (e.ctrlKey || e.metaKey) === parts.includes('ctrl') &&
     e.shiftKey === parts.includes('shift') &&
     e.altKey === parts.includes('alt') &&
-    e.key.toLowerCase() === key
+    (eventKey === key ||
+      SHIFT_GLYPH_ALIASES[eventKey] === key ||
+      SHIFT_GLYPH_ALIASES[key] === eventKey)
   );
 }
 

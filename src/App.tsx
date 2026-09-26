@@ -4,8 +4,8 @@ import { SearchPanel } from './components/editor/SearchPanel';
 import { SearchResultsSidebar } from './components/editor/SearchResultsSidebar';
 import { SettingsDialog } from './components/settings/SettingsDialog';
 import { DocumentPropertiesDialog } from './components/dialogs/DocumentPropertiesDialog';
-import { DocumentStatisticsDialog } from './components/dialogs/DocumentStatisticsDialog';
 import { MarginsDialog } from './components/dialogs/MarginsDialog';
+import { DocumentStatisticsDialog } from './components/dialogs/DocumentStatisticsDialog';
 import { CustomPageSizeDialog } from './components/dialogs/CustomPageSizeDialog';
 import { useConfigStore } from './lib/config/store';
 import { useConfigPersistence } from './lib/config/useConfigPersistence';
@@ -123,8 +123,8 @@ function App() {
       <SettingsDialog />
       <DocumentPropertiesDialog />
       <DocumentStatisticsDialog />
-      <MarginsDialog />
       <CustomPageSizeDialog />
+      <MarginsDialog />
     </>
   );
 }

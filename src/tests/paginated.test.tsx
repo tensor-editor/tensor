@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, render, fireEvent } from '@testing-library/react';
 import { useDocumentStore } from '@/lib/document/store';
+import { useDocumentPropertiesStore } from '@/lib/document/propertiesStore';
+import { MarginsDialog } from '@/components/dialogs/MarginsDialog';
 import { renderTensor, renderTensorInScrollContainer, GEOMETRY, settleLayout } from './harness';
-import { DEFAULT_MARGINS, PAGE_GAP } from '@/lib/document/pageSetup';
+import { DEFAULT_MARGINS, MARGIN_PRESETS, PAGE_GAP, toLayoutOptions, type Margins } from '@/lib/document/pageSetup';
+import { DocumentFileSchema } from '@/lib/document/schema';
 
 // A 40-line paragraph (62 chars/line under FakeMetrics): three of these
 // tile into 54 + 54 + 12 lines -> exactly 3 pages.
 const longParagraph = `<p>${'a'.repeat(GEOMETRY.charsPerLine * 40)}</p>`;
 const threePageDoc = longParagraph.repeat(3);
+
+// Base for toLayoutOptions calls that swap only the margins.
+const PAGE_SETUP_BASE = { pageSize: 'Letter', margins: DEFAULT_MARGINS, pageGap: PAGE_GAP };
 
 const pageSheets = () => Array.from(document.querySelectorAll('[data-page-index]'));
 
@@ -19,6 +25,7 @@ beforeEach(() => {
   useDocumentStore.setState({
     pageSetup: { pageSize: 'Letter', margins: DEFAULT_MARGINS, pageGap: PAGE_GAP },
   });
+  useDocumentPropertiesStore.setState({ marginsIsOpen: false });
 });
 
 afterEach(() => {
@@ -237,5 +244,122 @@ describe('PaginatedView integration', () => {
     sheet = document.querySelector('[data-page-index="0"]') as HTMLElement;
     expect(sheet.className).not.toContain('bg-white');
     expect(sheet.style.backgroundColor).toBe('rgb(254, 243, 199)');
+  });
+});
+
+// ─── M5.13/M6: margins — presets, commit-gated Apply, persistence ────────
+
+describe('margins (M5.13 presets, M6 Apply dialog)', () => {
+  it('k. presets convert to Word’s physical sizes in engine px; Normal ≡ DEFAULT_MARGINS', () => {
+    // Word’s set, at 96/72 px/pt: Narrow 0.5" = 48px all · Normal
+    // 1" = 96px all · Moderate 1"/0.75" = 96/72px · Wide 1"/2" =
+    // 96/192px. The store holds POINTS (36/72/54/144).
+    const px = (m: Margins) => toLayoutOptions({ ...PAGE_SETUP_BASE, margins: m }).margins;
+    expect(px(MARGIN_PRESETS.Narrow.margins)).toEqual({ top: 48, right: 48, bottom: 48, left: 48 });
+    expect(px(MARGIN_PRESETS.Normal.margins)).toEqual({ top: 96, right: 96, bottom: 96, left: 96 });
+    expect(px(MARGIN_PRESETS.Moderate.margins)).toEqual({ top: 96, right: 72, bottom: 96, left: 72 });
+    expect(px(MARGIN_PRESETS.Wide.margins)).toEqual({ top: 96, right: 192, bottom: 96, left: 192 });
+
+    // UNIT INVARIANT: the Normal preset is DEFAULT_MARGINS itself
+    // (reference-identical by construction) — applying it to a fresh
+    // doc reproduces the store default exactly.
+    expect(MARGIN_PRESETS.Normal.margins).toBe(DEFAULT_MARGINS);
+  });
+
+  it('l. margins Apply reflows without remount; pageCount follows the content box', async () => {
+    const utils = renderTensor(threePageDoc);
+    // The dialog rides alongside the editor exactly as App mounts it.
+    render(<MarginsDialog />);
+    await settle();
+
+    const stackBefore = document.querySelector('[data-testid="paginated-stack"]');
+    const sheetBefore = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(pageSheets()).toHaveLength(3); // 864px content → 54 lines/page
+
+    act(() => {
+      useDocumentPropertiesStore.getState().openMargins();
+    });
+    const presetBtn = [...document.querySelectorAll('button')].find((b) =>
+      b.textContent!.startsWith('Narrow')
+    )!;
+    act(() => {
+      fireEvent.click(presetBtn);
+    });
+    // DRAFT-ONLY divergence: picking a preset changes nothing until
+    // Apply — the document and the store are untouched.
+    expect(useDocumentStore.getState().pageSetup.margins).toEqual(DEFAULT_MARGINS);
+    expect(pageSheets()).toHaveLength(3);
+
+    act(() => {
+      fireEvent.click([...document.querySelectorAll('button')].find((b) => b.textContent === 'Apply')!);
+    });
+    await settle();
+
+    // Narrow: content height 1056 − 48 − 48 = 960px → 60 lines/page
+    // → the same 120 lines fit in 2 pages. Same DOM nodes, no remount.
+    expect(useDocumentStore.getState().pageSetup.margins).toEqual(MARGIN_PRESETS.Narrow.margins);
+    expect(pageSheets()).toHaveLength(2);
+    expect(document.querySelector('[data-testid="paginated-stack"]')).toBe(stackBefore);
+    expect(document.querySelector('[data-page-index="0"]')).toBe(sheetBefore);
+
+    act(() => {
+      useDocumentPropertiesStore.getState().closeMargins();
+    });
+    utils.unmount();
+  });
+
+  it('m. A4 (paper size) + Narrow (dialog Apply) — one reflow each, no remount; schema round-trip carries both', async () => {
+    const utils = renderTensor(threePageDoc);
+    render(<MarginsDialog />);
+    await settle();
+
+    const sheetBefore = document.querySelector('[data-page-index="0"]') as HTMLElement;
+
+    // Paper size stays the live Layout-tab control path.
+    act(() => {
+      const { pageSetup, setPageSetup } = useDocumentStore.getState();
+      setPageSetup({ ...pageSetup, pageSize: 'A4' });
+    });
+    await settle();
+
+    // Margins go through the commit-gated dialog.
+    act(() => {
+      useDocumentPropertiesStore.getState().openMargins();
+    });
+    const presetBtn = [...document.querySelectorAll('button')].find((b) =>
+      b.textContent!.startsWith('Narrow')
+    )!;
+    act(() => {
+      fireEvent.click(presetBtn);
+    });
+    act(() => {
+      fireEvent.click([...document.querySelectorAll('button')].find((b) => b.textContent === 'Apply')!);
+    });
+    await settle();
+
+    // A4 width 595pt → 793px; content 697px → 69 chars/line → 36
+    // lines/paragraph, 108 lines; content height 1123 − 48 = 1075px
+    // → 67 lines/page → 2 pages.
+    const sheetAfter = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(sheetAfter.style.width).toBe('793px');
+    expect(pageSheets()).toHaveLength(2);
+    expect(sheetAfter).toBe(sheetBefore); // reflowed, never remounted
+
+    // Round-trip: the persisted metadata carries BOTH facts.
+    const { pageSetup } = useDocumentStore.getState();
+    const roundTripped = DocumentFileSchema.parse({
+      version: 1,
+      docJSON: {},
+      metadata: { pageSetup },
+    });
+    const rtSetup = roundTripped.metadata.pageSetup!;
+    expect(rtSetup).toEqual(pageSetup);
+    expect(rtSetup.pageSize).toBe('A4');
+    expect(rtSetup.margins).toEqual(MARGIN_PRESETS.Narrow.margins);
+
+    act(() => {
+      useDocumentPropertiesStore.getState().closeMargins();
+    });
+    utils.unmount();
   });
 });

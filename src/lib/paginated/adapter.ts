@@ -121,26 +121,70 @@ function warnDroppedAttrs(dropped: Set<string>): void {
   );
 }
 
+/** PM fontSize attr (a CSS string; the UI writes 'NNpx') → core px.
+ * Pasted HTML may carry pt — the DATA BOUNDARY converts it to the
+ * core's px (M6-PRE: pt at the chrome, px in the core; parseLineHeight
+ * applies the same conversion for its absolute unit paths). */
 function parseFontSize(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
   if (typeof value === 'string') {
     const parsed = parseFloat(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return value.trim().endsWith('pt') ? Math.round(parsed * (96 / 72)) : parsed;
+    }
   }
   return fallback;
 }
 
-function parseLineHeight(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
-  if (typeof value === 'string') {
-    const parsed = parseFloat(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+/**
+ * PM lineHeight attr (a string — the schema stores CSS values) → the
+ * engine's multiplier. CSS semantics, in declining order of how the
+ * UI emits them (LineSpacingButton writes only unitless multipliers
+ * '1'/'1.15'/'1.5'/'2' and arbitrary custom numeric strings):
+ *   unitless 'NNN' | number → NNN            (multiplier, Word set)
+ *   'NNN%'                  → NNN / 100      (pasted HTML)
+ *   'NNNpx' | 'NNNpt'        → absolute → ÷fontSize (CSS: relative
+ *                             to the element's own font size)
+ *   'NNNem'                 → NNN            (already × fontSize)
+ *   'normal' / junk / non-positive → undefined (single spacing)
+ * Outside [0.25, 4] → undefined: a garbage multiplier ('25px' pasted
+ * raw used to become 25×) must degrade to single, never to a wreck.
+ */
+function parseLineHeight(value: unknown, fontSize: number): number | undefined {
+  const MIN_LH = 0.25;
+  const MAX_LH = 4;
+  let multiplier: number | undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    multiplier = value;
+  } else if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw || raw === 'normal') return undefined;
+    const parsed = parseFloat(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+    if (raw.endsWith('%')) multiplier = parsed / 100;
+    else if (raw.endsWith('px')) multiplier = parsed / fontSize;
+    else if (raw.endsWith('pt')) multiplier = (parsed * (96 / 72)) / fontSize;
+    else if (raw.endsWith('em')) multiplier = parsed;
+    else multiplier = parsed;
   }
-  return undefined;
+  if (multiplier == null || !Number.isFinite(multiplier) || multiplier <= 0) return undefined;
+  if (multiplier < MIN_LH || multiplier > MAX_LH) return undefined;
+  return multiplier;
 }
 
 function isNonZero(value: unknown): boolean {
   return typeof value === 'number' && value !== 0;
+}
+
+/**
+ * PM spaceBefore/spaceAfter attrs (numbers, px — the schema stores
+ * CSS px values, same unit the engine consumes) → engine block-tier
+ * spacing. Non-positive/NaN → undefined: the walk treats undefined as
+ * 0, and undefined keeps the engine's contentHash free of no-op keys.
+ */
+function parseSpacing(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+  return undefined;
 }
 
 /** The per-node conversion (the expensive part): runs, marks, decor,
@@ -187,28 +231,29 @@ const textStyleMark = child.marks.find((m) => m.type.name === 'textStyle');
             ? textStyleMark.attrs.fontFamily
             : null;
 
-      const style: TextStyle = {
-        fontFamily: familyAttr ?? baseStyle.fontFamily,
-      fontSize:
+      const fontSize =
         textStyleMark?.attrs?.fontSize != null
           ? parseFontSize(textStyleMark.attrs.fontSize, baseStyle.fontSize)
-          : headingDefault?.fontSize ?? baseStyle.fontSize,
-      bold: child.marks.some((m) => m.type.name === 'bold') || headingDefault?.bold,
-      italic: child.marks.some((m) => m.type.name === 'italic'),
-      lineHeight: parseLineHeight(node.attrs?.lineHeight),
-    };
+          : headingDefault?.fontSize ?? baseStyle.fontSize;
+
+      const style: TextStyle = {
+        fontFamily: familyAttr ?? baseStyle.fontFamily,
+        fontSize,
+        bold: child.marks.some((m) => m.type.name === 'bold') || headingDefault?.bold,
+        italic: child.marks.some((m) => m.type.name === 'italic'),
+        lineHeight: parseLineHeight(node.attrs?.lineHeight, fontSize),
+      };
 
     // Dropped-attr detection — collected, warned once, never silent.
     // color/highlight/underline/strike and left/center/right textAlign
-    // are now painted (runDecor / block align); justify remains engine
-    // work and stays loud.
+    // are painted (runDecor / block align); spaceBefore/spaceAfter are
+    // MAPPED to the engine's block-tier spacing (M6); justify remains
+    // engine work and stays loud.
     if (alignAttr === 'justify') dropped.add('textAlign (justify — engine work)');
     if (child.marks.some((m) => m.type.name === 'link')) dropped.add('link');
     if (isNonZero(node.attrs?.indent)) dropped.add('indent');
     if (isNonZero(node.attrs?.indentLeft)) dropped.add('indentLeft');
     if (isNonZero(node.attrs?.indentRight)) dropped.add('indentRight');
-    if (isNonZero(node.attrs?.spaceBefore)) dropped.add('spaceBefore');
-    if (isNonZero(node.attrs?.spaceAfter)) dropped.add('spaceAfter');
 
     const highlightMark = child.marks.find((m) => m.type.name === 'highlight');
     runs.push({ text: child.text, style });
@@ -226,10 +271,16 @@ const textStyleMark = child.marks.find((m) => m.type.name === 'textStyle');
     text += child.text;
   });
 
+  // Block-tier spacing (M6): engine px, same unit the PM schema
+  // stores. Applied once at block entry / block exit by the walk —
+  // never re-applied on fragment continuations.
+  const spaceBefore = parseSpacing(node.attrs?.spaceBefore);
+  const spaceAfter = parseSpacing(node.attrs?.spaceAfter);
+
   const semantic: ParagraphBlock | HeadingBlock =
     kind === 'heading'
-      ? { id: blockId, kind: 'heading', level: node.attrs.level ?? 1, runs }
-      : { id: blockId, kind: 'paragraph', runs };
+      ? { id: blockId, kind: 'heading', level: node.attrs.level ?? 1, runs, spaceBefore, spaceAfter }
+      : { id: blockId, kind: 'paragraph', runs, spaceBefore, spaceAfter };
 
   return { gen: cacheGeneration, semantic, adapter: { id: blockId, runs, text, from: 0, to: 0, align, runDecor } };
 }

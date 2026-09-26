@@ -13,8 +13,12 @@ interface BlockCanvasProps {
   left: number;
   top: number;
   width: number;
+  /** Alignment rides the shared offset; runDecor is the per-run paint layer. */
   align: TextAlign;
   runDecor: readonly RunDecor[];
+  /** Non-printing characters (config.editor.showNonPrintingChars) —
+   * display-only ink, never a layout fact, never in print/export. */
+  npc?: boolean;
 }
 
 /**
@@ -32,7 +36,7 @@ interface BlockCanvasProps {
  * their pixels. Falls back to full repaint on canvas resize, first-line
  * edits, or style changes (the fallback cost = the old behavior).
  */
-export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metrics, left, top, width, align, runDecor }: BlockCanvasProps) {
+export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metrics, left, top, width, align, runDecor, npc }: BlockCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const prevLinesRef = useRef<readonly LineBox[] | null>(null);
   const prevTextRef = useRef('');
@@ -47,7 +51,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
     if (!canvas) return;
 
     const decorKey = runDecor.map((d) => `${d.color}|${d.highlight}|${d.underline}|${d.strike}`).join(';');
-    const boxKey = `${left}|${top}|${width}|${align}|${decorKey}`;
+    const boxKey = `${left}|${top}|${width}|${align}|${decorKey}|${npc === true ? 'npc' : ''}`;
     const unchanged =
       prevBoxRef.current === boxKey &&
       prevTextRef.current === text &&
@@ -94,7 +98,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
       const damageTop = lines[damageFrom].rect.y - first.rect.y;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, damageTop, width, height - damageTop);
-      paintLines(ctx, lines.slice(damageFrom), runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
+      paintLines(ctx, lines.slice(damageFrom), runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor, npc });
       // Receipt: px² actually rasterized (cleared + repainted region).
       __w.__benchPaints!.paints[__w.__benchPaints!.paints.length - 1].px2 = width * (height - damageTop);
     } else {
@@ -103,7 +107,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
       canvas.width = newW;
       canvas.height = newH;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      paintLines(ctx, lines, runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor });
+      paintLines(ctx, lines, runs, text, first.rect.y, metrics, { align, contentWidth: width, runDecor, npc });
       // Receipt: full canvas.
       __w.__benchPaints!.paints[__w.__benchPaints!.paints.length - 1].px2 = width * height;
     }
@@ -111,7 +115,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
     prevLinesRef.current = lines;
     prevTextRef.current = text;
     prevBoxRef.current = boxKey;
-  }, [lines, runs, text, metrics, left, top, width, height, first.rect.y, align, runDecor]);
+  }, [lines, runs, text, metrics, left, top, width, height, first.rect.y, align, runDecor, npc]);
 
   return (
     <canvas

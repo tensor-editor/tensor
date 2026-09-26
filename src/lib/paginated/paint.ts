@@ -19,10 +19,32 @@ import { alignOffset } from './positionMap';
 
 const DEFAULT_TEXT_COLOR = '#000';
 
+/** Muted ink for non-printing-character glyphs (canvas has no theme). */
+const NPC_COLOR = 'rgba(0, 0, 0, 0.45)';
+
 export interface PaintExtras {
   align: TextAlign;
   contentWidth: number;
   runDecor: readonly RunDecor[];
+  /**
+   * NON-PRINTING CHARACTERS (M6, paint-only v1): ¶ at every block
+   * end (from the block's text boundary — an empty block paints it at
+   * the line start), middle-dot for non-breaking spaces, arrow for
+   * tabs. OFF unless explicitly set: the on-screen painter passes the
+   * user's config toggle (config.editor.showNonPrintingChars); NO
+   * print/export path passes it (none exists today — .wpdoc export
+   * serializes document JSON, never pixels). Glyph substitution is
+   * INK only: x still advances by the MEASURED layout widths, so
+   * painted positions never move. Hard breaks have no paginated model
+   * (the adapter throws loudly and falls back to pageless, whose CSS
+   * trick keeps showing them); list-marker glyphs are M6-proper scope.
+   */
+  npc?: boolean;
+}
+
+/** Paint-only glyph substitution: nbsp → middle-dot, tab → arrow. */
+function npcSubstitute(s: string): string {
+  return s.replace(/\u00A0/g, '·').replace(/\t/g, '→');
 }
 
 export function paintLines(
@@ -37,6 +59,7 @@ export function paintLines(
   const align = extras.align;
   const contentWidth = extras.contentWidth;
   const runDecor = extras.runDecor;
+  const npc = extras.npc === true;
 
   for (const line of lines) {
     // The line's own width sets its align offset — same function the
@@ -61,7 +84,7 @@ export function paintLines(
 
       ctx.fillStyle = decor.color ?? DEFAULT_TEXT_COLOR;
       ctx.font = fontString(run.style);
-      ctx.fillText(segmentText, x, baselineY);
+      ctx.fillText(npc ? npcSubstitute(segmentText) : segmentText, x, baselineY);
 
       // TODO(typographic polish): proper underline/strike metrics per
       // font (nskipping ink gaps, weight-scaled thickness) — the
@@ -80,6 +103,17 @@ export function paintLines(
       }
 
       x += width;
+    }
+
+    // Block-end pilcrow, from the block boundary: only the line whose
+    // range ends at the block's text end (an empty block's zero-length
+    // range qualifies — its ¶ sits at the line start). A split
+    // block's earlier fragments stay bare; the final one paints it.
+    if (npc && line.rangeEnd === text.length) {
+      const restore = ctx.fillStyle;
+      ctx.fillStyle = NPC_COLOR;
+      ctx.fillText('¶', x, baselineY);
+      ctx.fillStyle = restore;
     }
   }
 }

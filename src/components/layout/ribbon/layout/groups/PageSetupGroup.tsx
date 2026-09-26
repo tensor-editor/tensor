@@ -33,11 +33,12 @@ export function PageSetupGroup() {
 
   return (
     <RibbonGroup>
+      {/* Margins entrance (M6 ruling): Layout > Margins opens the
+          commit-gated dialog — the ONE margins control surface. */}
       <IconButton
         label="Margins"
         icon={<RulerDimensionLine size={16} />}
         onClick={() => useDocumentPropertiesStore.getState().openMargins()}
-        disabled
       />
 
       <IconButton

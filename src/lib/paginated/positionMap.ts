@@ -159,6 +159,26 @@ export interface CaretGeometry {
   height: number;
 }
 
+/**
+ * The line's TEXT-BAND height (ink extent, leading excluded): the
+ * baseline plus the max descent over the line's runs. Under the M6
+ * bottom-only ruling the box top IS the text top (baseline = ascent
+ * from the box top), so the text band is exactly
+ * [rect.y, rect.y + baseline + descent). Returns null for an empty
+ * line (no runs to measure) — callers fall back to the full box.
+ */
+function textBandHeight(line: LineBox, block: AdapterBlock, metrics: TextMetrics): number | null {
+  let descent = 0;
+  let hasRuns = false;
+  for (const seg of line.segments) {
+    const run = block.runs[seg.runIndex];
+    if (!run) continue;
+    hasRuns = true;
+    descent = Math.max(descent, metrics.descent(run.style));
+  }
+  return hasRuns ? line.baseline + descent : null;
+}
+
 export function caretGeometry(
   blocks: readonly AdapterBlock[],
   result: LayoutResult,
@@ -176,8 +196,13 @@ export function caretGeometry(
     x:
       lineOffsetX(line, bo.block, bo.offset, metrics) +
       alignOffset(bo.block.align, line.rect.width, page0.contentBox.width),
+    // THE CARET IS THE TEXT BAND, NOT THE LINE BOX (GDocs): top stays
+    // at the box top (text, under the M6 ruling) but the bottom stops
+    // at the text's descent — a 2.0-spaced line never stretches the
+    // caret across its leading. Selection rects keep the full box.
+    // At lineHeight 1.0 this is bit-identical to the box height.
     y: line.rect.y,
-    height: line.rect.height,
+    height: textBandHeight(line, bo.block, metrics) ?? line.rect.height,
   };
 }
 
@@ -187,8 +212,9 @@ export interface CaretStackRect {
   height: number;
 }
 
-/** Caret/caret-like rect in stack-local px: page stack offset + content
- * box + LineBox rect. Shared by the caret painter and the
+/** Caret/caret-like rect in stack-local px: page stack offset +
+ * content box + the caret's text-band geometry (top at the LineBox
+ * top, height = text band). Shared by the caret painter and the
  * caret-follow scroll — one source of this arithmetic. */
 export function caretStackRect(
   caret: CaretGeometry,

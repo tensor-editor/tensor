@@ -147,8 +147,9 @@ describe('textRangeLineRects (selection/search projection)', () => {
 
   it('caret geometry rides the same math', () => {
     const g = caretGeometry(wrapBlocks, result, 1 + 100, FakeMetrics)!;
-    expect(g).toEqual({ pageIndex: 0, x: 380, y: 16, height: 16 });
+    // Caret height = text band: baseline 13 + descent 0.2×16 = 3.2.
+    expect(g).toEqual({ pageIndex: 0, x: 380, y: 16, height: 16.2 });
     const g2 = caretGeometry(wrapBlocks, result, B_TEXT, FakeMetrics)!;
-    expect(g2).toEqual({ pageIndex: 1, x: 0, y: 0, height: 16 });
+    expect(g2).toEqual({ pageIndex: 1, x: 0, y: 0, height: 16.2 });
   });
 });

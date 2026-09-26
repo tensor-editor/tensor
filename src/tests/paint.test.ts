@@ -125,6 +125,64 @@ describe('paint: marks', () => {
   });
 });
 
+describe('paint: non-printing characters (M6 v1)', () => {
+  const EXTRAS = (npc?: boolean) => ({ align: 'left' as const, contentWidth: 624, runDecor: [] as RunDecor[], ...(npc != null ? { npc } : {}) });
+
+  function paintWith(text: string, box: LineBox, npc?: boolean) {
+    const ctx = makeCtx();
+    const r: Run[] = [{ text, style: STYLE }];
+    paintLines(ctx as unknown as CanvasRenderingContext2D, [box], r, text, 0, FakeMetrics, EXTRAS(npc));
+    return ctx;
+  }
+
+  it('npc on: block end paints a muted ¶ at the last glyph’s end', () => {
+    const ctx = paintWith('Hi there', line(80), true);
+    const texts = ctx.ops.filter((o) => o.op === 'fillText');
+    expect(texts.map((o) => o.args[0])).toEqual(['Hi there', '¶']);
+    // x = line start + measured width (80); same baseline as the text.
+    expect(texts[1]!.args[1]).toBe(80);
+    expect(texts[1]!.args[2]).toBe(13);
+    // Muted ink, restored afterwards.
+    expect(ctx.fillStyle).toBe('#000');
+  });
+
+  it('npc off by default: nothing extra is painted', () => {
+    const ctx = paintWith('Hi there', line(80), false);
+    expect(ctx.ops.filter((o) => o.op === 'fillText')).toHaveLength(1);
+    // Absent flag behaves identically (no print/export path ever sets it).
+    const ctx2 = paintWith('Hi there', line(80), undefined);
+    expect(ctx2.ops.filter((o) => o.op === 'fillText')).toHaveLength(1);
+  });
+
+  it('nbsp and tab paint as middle-dot and arrow — ink only, same advance', () => {
+    const text = 'a\u00A0b\tc';
+    const box: LineBox = { ...line(50), rangeEnd: 5, segments: [{ runIndex: 0, start: 0, end: 5 }] };
+    const ctx = paintWith(text, box, true);
+    const texts = ctx.ops.filter((o) => o.op === 'fillText');
+    expect(texts[0]!.args[0]).toBe('a·b→c');
+    // The ¶ still rides the MEASURED width (50) — substitution never moves ink.
+    expect(texts[1]!.args[1]).toBe(50);
+  });
+
+  it('an earlier fragment of a split block paints no ¶', () => {
+    const box: LineBox = { ...line(80), rangeEnd: 4, segments: [{ runIndex: 0, start: 0, end: 4 }] };
+    const ctx = paintWith('Hi there', box, true);
+    expect(ctx.ops.filter((o) => o.op === 'fillText')).toHaveLength(1);
+  });
+
+  it('an empty block paints ¶ at the line start', () => {
+    const box: LineBox = {
+      blockId: 'a', lineIndex: 0, pageIndex: 0,
+      rect: { x: 0, y: 0, width: 0, height: 16 },
+      baseline: 13, rangeStart: 0, rangeEnd: 0, segments: [],
+    };
+    const ctx = paintWith('', box, true);
+    const texts = ctx.ops.filter((o) => o.op === 'fillText');
+    expect(texts).toHaveLength(1);
+    expect(texts[0]!.args).toEqual(['¶', 0, 13]);
+  });
+});
+
 describe('paint: alignment (one shared offset)', () => {
   it('alignOffset: left 0, center (cw-lw)/2, right cw-lw', () => {
     expect(alignOffset('left', 80, 624)).toBe(0);

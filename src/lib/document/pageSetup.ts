@@ -111,6 +111,39 @@ export const DEFAULT_MARGINS: Margins = {
   right: 72,
 };
 
+// Word's physical margin presets, stored in POINTS (the store's
+// canonical unit — the engine receives px via toLayoutOptions at
+// 96/72 px/pt). pt ↔ px table (engine units):
+//   Narrow   36pt all        → 48px all       (0.5")
+//   Normal   72pt all        → 96px all       (1.0" — ≡ DEFAULT_MARGINS)
+//   Moderate T/B 72, L/R 54  → T/B 96, L/R 72 (1.0" / 0.75")
+//   Wide     T/B 72, L/R 144 → T/B 96, L/R 192 (1.0" / 2.0")
+// "Normal" is kept reference-equal to DEFAULT_MARGINS by construction
+// (pinned by test) so the preset and the store default can never drift.
+export interface MarginPreset {
+  label: string;
+  margins: Margins;
+}
+
+export const MARGIN_PRESETS: Record<string, MarginPreset> = {
+  Narrow: {
+    label: 'Narrow',
+    margins: { top: 36, bottom: 36, left: 36, right: 36 },
+  },
+  Normal: {
+    label: 'Normal',
+    margins: DEFAULT_MARGINS,
+  },
+  Moderate: {
+    label: 'Moderate',
+    margins: { top: 72, bottom: 72, left: 54, right: 54 },
+  },
+  Wide: {
+    label: 'Wide',
+    margins: { top: 72, bottom: 72, left: 144, right: 144 },
+  },
+};
+
 export function toLayoutOptions(pageSetup: PageSetup): LayoutOptions {
   let widthPt: number;
   let heightPt: number;
