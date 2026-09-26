@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
 import { useDocumentStore } from '@/lib/document/store';
-import { renderTensor, renderTensorInScrollContainer, GEOMETRY } from './harness';
-import { settleLayout } from './harness';
+import { renderTensor, renderTensorInScrollContainer, GEOMETRY, settleLayout } from './harness';
+import { DEFAULT_MARGINS, PAGE_GAP } from '@/lib/document/pageSetup';
 
 // A 40-line paragraph (62 chars/line under FakeMetrics): three of these
 // tile into 54 + 54 + 12 lines -> exactly 3 pages.
@@ -13,8 +13,12 @@ const pageSheets = () => Array.from(document.querySelectorAll('[data-page-index]
 
 beforeEach(() => {
   // The document store persists between tests (module singleton) — reset
-  // the parts the PaginatedView publishes.
+  // the parts the PaginatedView publishes, including the page setup that
+  // later tests mutate (g sets A4; h/i/j assume Letter defaults).
   useDocumentStore.getState().setPageInfo(1, 1);
+  useDocumentStore.setState({
+    pageSetup: { pageSize: 'Letter', margins: DEFAULT_MARGINS, pageGap: PAGE_GAP },
+  });
 });
 
 afterEach(() => {
@@ -163,11 +167,75 @@ describe('M4 PaginatedView integration', () => {
     });
     await settle();
 
-    // Reflowed geometry: A4 width 794.
+    // Reflowed geometry: A4 = 595pt wide → 595 * 96/72 = 793px.
     const sheetAfter = document.querySelector('[data-page-index="0"]') as HTMLElement;
-    expect(sheetAfter.style.width).toBe('794px');
+    expect(sheetAfter.style.width).toBe('793px');
     // No remount: same DOM nodes.
     expect(document.querySelector('[data-testid="paginated-stack"]')).toBe(stackBefore);
     expect(document.querySelector('[data-page-index="0"]')).toBe(sheetBefore);
+  });
+
+  it('h. orientation: landscape swaps page dimensions without remount', async () => {
+    renderTensor('<p>hello world</p>');
+    await settle();
+
+    const sheetBefore = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(sheetBefore.style.width).toBe(`${GEOMETRY.pageWidth}px`);
+    expect(sheetBefore.style.height).toBe(`${GEOMETRY.pageHeight}px`);
+
+    act(() => {
+      const { pageSetup, setPageSetup } = useDocumentStore.getState();
+      setPageSetup({ ...pageSetup, orientation: 'landscape' });
+    });
+    await settle();
+
+    const sheetAfter = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(sheetAfter.style.width).toBe(`${GEOMETRY.pageHeight}px`);
+    expect(sheetAfter.style.height).toBe(`${GEOMETRY.pageWidth}px`);
+    expect(sheetAfter).toBe(sheetBefore); // no remount
+  });
+
+  it('i. custom page size: dims flow through layout, landscape swaps them', async () => {
+    renderTensor('<p>hello world</p>');
+    await settle();
+
+    act(() => {
+      const { pageSetup, setPageSetup } = useDocumentStore.getState();
+      // Store holds POINTS; the engine receives px (1pt = 96/72px).
+      setPageSetup({ ...pageSetup, pageSize: 'custom', customWidth: 700, customHeight: 900 });
+    });
+    await settle();
+
+    const sheet = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(sheet.style.width).toBe('933px');  // 700pt * 4/3 = 933px
+    expect(sheet.style.height).toBe('1200px'); // 900pt * 4/3 = 1200px
+
+    act(() => {
+      const { pageSetup, setPageSetup } = useDocumentStore.getState();
+      setPageSetup({ ...pageSetup, orientation: 'landscape' });
+    });
+    await settle();
+
+    const landscape = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(landscape.style.width).toBe('1200px');
+    expect(landscape.style.height).toBe('933px');
+  });
+
+  it('j. page background: pageColor paints sheets, absent = white class', async () => {
+    renderTensor('<p>hello world</p>');
+    await settle();
+
+    let sheet = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(sheet.className).toContain('bg-white');
+
+    act(() => {
+      const { pageSetup, setPageSetup } = useDocumentStore.getState();
+      setPageSetup({ ...pageSetup, pageColor: '#fef3c7' });
+    });
+    await settle();
+
+    sheet = document.querySelector('[data-page-index="0"]') as HTMLElement;
+    expect(sheet.className).not.toContain('bg-white');
+    expect(sheet.style.backgroundColor).toBe('rgb(254, 243, 199)');
   });
 });

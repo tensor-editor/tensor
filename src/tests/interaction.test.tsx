@@ -44,8 +44,16 @@ const twoPageDoc = `<p>${'a'.repeat(A_TEXT_END)}</p><p>${'b'.repeat(A_TEXT_END)}
 const wrapper = () => document.querySelector('[data-testid="paginated-zoom-wrapper"]') as HTMLElement;
 const selRects = () => [...document.querySelectorAll('[data-testid="selection-rect"]')] as HTMLElement[];
 
-function mouseDown(x: number, y: number, opts: { shiftKey?: boolean } = {}) {
+function mouseDown(x: number, y: number, opts: { shiftKey?: boolean; button?: number } = {}) {
   fireEvent.mouseDown(wrapper(), { clientX: x, clientY: y, ...opts });
+}
+
+/** jsdom/testing-library has no auxClick sugar — dispatch it raw. */
+function auxClick(x: number, y: number) {
+  fireEvent(
+    wrapper(),
+    new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1, clientX: x, clientY: y }),
+  );
 }
 
 async function settle() {
@@ -58,7 +66,10 @@ beforeEach(() => {
     pageSetup: { pageSize: 'Letter', margins: DEFAULT_MARGINS, pageGap: PAGE_GAP },
   });
   useConfigStore.setState((state) => ({
-    config: { ...state.config, editor: { ...state.config.editor, zoomLevel: 100 } },
+    config: {
+      ...state.config,
+      editor: { ...state.config.editor, zoomLevel: 100, pasteOnMiddleClick: false },
+    },
   }));
 });
 
@@ -341,6 +352,42 @@ describe('M5 STEP 3: clipboard (PM\u2019s own handlers)', () => {
     });
     expect(editor.state.doc.textContent).toContain('menu-pasted');
   });
+
+  it('middle-click pastes at the click point when enabled, is a no-op when disabled', async () => {
+    // Disabled (default): the caret/selection and the document are untouched.
+    // The press AND release defaults must die — Linux webviews paste the
+    // X11 primary selection into the focused editable natively (press),
+    // and Firefox pastes on release/auxclick.
+    const disabled = renderTensorInScrollContainer('<p>Hello world</p>');
+    await settle();
+    act(() => {
+      disabled.editor.commands.setTextSelection(2);
+    });
+    mouseDown(CB + 12, CY + 8, { button: 1 });
+    fireEvent.mouseUp(wrapper(), { clientX: CB + 12, clientY: CY + 8, button: 1 });
+    auxClick(CB + 12, CY + 8);
+    await settle();
+    expect(disabled.editor.state.selection.from).toBe(2);
+    expect(disabled.editor.state.doc.textContent).toBe('Hello world');
+    disabled.unmount();
+
+    // Enabled: caret moves to the hit-test position, then the mocked
+    // system clipboard (' menu-pasted') replays through PM's handler.
+    act(() => {
+      useConfigStore.setState((state) => ({
+        config: { ...state.config, editor: { ...state.config.editor, pasteOnMiddleClick: true } },
+      }));
+    });
+    const enabled = renderTensorInScrollContainer('<p>Hello world</p>');
+    await settle();
+    mouseDown(CB + 12, CY + 8, { button: 1 }); // 'H|ello world' — offset 1
+    await settle();
+    expect(enabled.editor.state.doc.textContent).toBe('H menu-pastedello world');
+    // The release-side swallow must not double-paste.
+    auxClick(CB + 12, CY + 8);
+    await settle();
+    expect(enabled.editor.state.doc.textContent).toBe('H menu-pastedello world');
+  });
 });
 
 describe('M5.5: alignment symmetry + selection color + cursor', () => {
@@ -416,25 +463,50 @@ describe('M5.5: alignment symmetry + selection color + cursor', () => {
     expect(selRects()[0]!.className).toContain('bg-primary/25');
   });
 
-  it('GeneralPanel exposes the selection color via the shared ColorPickerButton under Editor', () => {
+  it('GeneralPanel exposes the selection color via a solid swatch + palette (no reset)', () => {
     const { getByText, getByRole } = render(<GeneralPanel />);
     expect(getByText('Selection Color')).toBeTruthy();
-    // The same split-button chrome the ribbon's text/highlight pickers
-    // use: an icon button plus an options popover trigger.
+    // Split: solid-swatch main button + options popover trigger.
+    expect(getByRole('button', { name: 'Selection Color' })).toBeTruthy();
     expect(getByRole('button', { name: 'Selection Color options' })).toBeTruthy();
 
-    // Open the options popover, click the 'Theme' reset, then a preset
-    // swatch — the store must follow (the picker writes config directly).
+    // Open the options popover — no reset button (hideReset).
     act(() => {
       getByRole('button', { name: 'Selection Color options' }).click();
     });
-    const reset = getByText('Theme');
-    expect(reset).toBeTruthy(); // resetLabel, shared component vocabulary
+    const reset = document.querySelector('[data-slot="popover-content"] button');
+    // The only button in the popover content should be palette swatches,
+    // not a reset/none — the first popover child buttons are swatches with
+    // aria-labels like "#ffffff".
+    const firstBtn = reset as HTMLElement;
+    expect(firstBtn.getAttribute('aria-label')).not.toBe('Theme');
+    expect(firstBtn.getAttribute('aria-label')).not.toBe('None');
+
+    // Click a preset swatch — the store must follow.
     act(() => {
       const preset = document.querySelector('[aria-label="#3b82f6"]');
       (preset as HTMLElement).click();
     });
     expect(useConfigStore.getState().config.editor.selectionColor).toBe('#3b82f6');
+  });
+
+  it('GeneralPanel > Behavior: paste-on-middle-click toggle flips the config', () => {
+    const { getByText } = render(<GeneralPanel />);
+    expect(getByText('Paste on Middle Click')).toBeTruthy();
+
+    // Three switches live in this panel (Dark Mode, Floating Toolbar,
+    // this one) — scope to the Behavior row before querying.
+    const row = getByText('Paste on Middle Click').closest('.py-3') as HTMLElement;
+    const toggle = row.querySelector('[role="switch"]') as HTMLElement;
+    expect(useConfigStore.getState().config.editor.pasteOnMiddleClick).toBe(false);
+    act(() => {
+      toggle.click();
+    });
+    expect(useConfigStore.getState().config.editor.pasteOnMiddleClick).toBe(true);
+    act(() => {
+      toggle.click();
+    });
+    expect(useConfigStore.getState().config.editor.pasteOnMiddleClick).toBe(false);
   });
 });
 

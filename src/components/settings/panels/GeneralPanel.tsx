@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Moon, Type, Paintbrush, Accessibility as AccessibilityIcon } from 'lucide-react';
+import { Moon, Type, Paintbrush, Accessibility as AccessibilityIcon, Mouse } from 'lucide-react';
 import { useConfigStore } from '@/lib/config/store';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import type { SettingsSectionDefinition } from '@/lib/settings/types';
 export const GENERAL_PANEL_SECTIONS: SettingsSectionDefinition[] = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'editor', label: 'Editor' },
+  { id: 'behavior', label: 'Behavior' },
   { id: 'accessibility', label: 'Accessibility' },
 ];
 
@@ -38,12 +39,11 @@ function SelectionColorRow() {
       label="Selection Color"
       description="Background of the painted text selection; always painted translucent so text stays readable"
     >
-      {/* The SAME picker the ribbon's text/highlight colors use. */}
       <ColorPickerButton
         label="Selection Color"
-        icon={<span className="text-[10px] font-semibold leading-none">ABC</span>}
-        defaultColor={selectionColor || '#3b82f6'}
-        resetLabel="Theme"
+        solidSwatch
+        hideReset
+        defaultColor={selectionColor}
         onChange={(color) => setSelectionColor(color ?? '')}
       />
     </Row>
@@ -57,6 +57,8 @@ export function GeneralPanel() {
   const setUseFloatingToolbar = useConfigStore((s) => s.setUseFloatingToolbar);
   const reduceMotion = useConfigStore((s) => s.config.accessibility.reduceMotion);
   const setReduceMotion = useConfigStore((s) => s.setReduceMotion);
+  const pasteOnMiddleClick = useConfigStore((s) => s.config.editor.pasteOnMiddleClick);
+  const setPasteOnMiddleClick = useConfigStore((s) => s.setPasteOnMiddleClick);
 
   return (
     <div className="flex flex-col">
@@ -67,10 +69,26 @@ export function GeneralPanel() {
       </SettingsSection>
 
       <SettingsSection id="editor" title="Editor">
-        <Row icon={<Type className="h-4 w-4" />} label="Floating Toolbar" description="Show a formatting toolbar near text selections">
-          <Switch checked={useFloatingToolbar} onCheckedChange={setUseFloatingToolbar} />
+        {/* One wrapper = one divide-y child: no border between these two rows. */}
+        <div>
+          <Row icon={<Type className="h-4 w-4" />} label="Floating Toolbar" description="Show a formatting toolbar near text selections">
+            <Switch checked={useFloatingToolbar} onCheckedChange={setUseFloatingToolbar} />
+          </Row>
+          <SelectionColorRow />
+        </div>
+      </SettingsSection>
+
+      <SettingsSection id="behavior" title="Behavior">
+        <Row
+          icon={<Mouse className="h-4 w-4" />}
+          label="Paste on Middle Click"
+          description="Middle-click pastes the clipboard at the clicked position"
+        >
+          <Switch
+            checked={pasteOnMiddleClick}
+            onCheckedChange={(checked: boolean) => setPasteOnMiddleClick(checked)}
+          />
         </Row>
-        <SelectionColorRow />
       </SettingsSection>
 
       <SettingsSection id="accessibility" title="Accessibility">

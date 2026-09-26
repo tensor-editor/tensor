@@ -51,6 +51,12 @@ export function Editor({ metrics }: { metrics?: TextMetrics }) {
     let isLinkMouseDown = false;
 
     function handleMouseDown(e: MouseEvent) {
+      // Fallback-mode middle-click: the visible PM view is an editable,
+      // and Linux webviews paste the X11 primary selection by default —
+      // the Behavior toggle must hold in every mode.
+      if (e.button === 1 && !useConfigStore.getState().config.editor.pasteOnMiddleClick) {
+        e.preventDefault();
+      }
       const target = e.target as HTMLElement;
       const link = target.closest('a');
       isLinkMouseDown = !!link && e.detail === 1 && e.button === 0;

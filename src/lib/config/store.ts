@@ -11,6 +11,8 @@ interface ConfigStore {
   setUseFloatingToolbar: (value: boolean) => void;
   setReduceMotion: (value: Config["accessibility"]["reduceMotion"]) => void;
   setSelectionColor: (value: string) => void;
+  setMeasurementUnit: (value: Config["editor"]["measurementUnit"]) => void;
+  setPasteOnMiddleClick: (value: boolean) => void;
 
   setKeybinding: (id: string, keys: string) => void;
   resetKeybinding: (id: string) => void;
@@ -75,6 +77,22 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       config: {
         ...state.config,
         editor: { ...state.config.editor, selectionColor: value },
+      },
+    })),
+
+  setMeasurementUnit: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, measurementUnit: value },
+      },
+    })),
+
+  setPasteOnMiddleClick: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, pasteOnMiddleClick: value },
       },
     })),
 

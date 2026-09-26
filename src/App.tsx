@@ -4,6 +4,9 @@ import { SearchPanel } from './components/editor/SearchPanel';
 import { SearchResultsSidebar } from './components/editor/SearchResultsSidebar';
 import { SettingsDialog } from './components/settings/SettingsDialog';
 import { DocumentPropertiesDialog } from './components/dialogs/DocumentPropertiesDialog';
+import { DocumentStatisticsDialog } from './components/dialogs/DocumentStatisticsDialog';
+import { MarginsDialog } from './components/dialogs/MarginsDialog';
+import { CustomPageSizeDialog } from './components/dialogs/CustomPageSizeDialog';
 import { useConfigStore } from './lib/config/store';
 import { useConfigPersistence } from './lib/config/useConfigPersistence';
 import './index.css';
@@ -96,14 +99,6 @@ function App() {
 
   const theme = useConfigStore((s) => s.config.theme);
 
-  // Applied to <html>, not a wrapper div — Base UI's Portal-based
-  // components (Dialog, DropdownMenu, Popover, Tooltip) render their
-  // actual content as a direct child of <body>, outside any wrapper div
-  // in this component tree. The Tailwind `dark` variant only matches
-  // .dark or *actual DOM descendants* of .dark — a wrapper div's class
-  // has zero effect on portaled content sitting outside it, causing it
-  // to silently fall back to light-mode tokens with no error. <html> is
-  // an ancestor of literally everything, portaled or not.
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
@@ -115,7 +110,7 @@ function App() {
         <div className="relative flex-1 overflow-hidden">
           {/* M4.1 desk: the editor scroll surface — the muted token reads
               as the classic gray desk in light mode and adapts in dark. */}
-          <div className="absolute inset-0 overflow-auto bg-muted pt-6">
+          <div className="absolute inset-0 overflow-auto bg-muted pt-6 pb-6">
             <Editor />
           </div>
           <SearchPanel />
@@ -127,6 +122,9 @@ function App() {
       </main>
       <SettingsDialog />
       <DocumentPropertiesDialog />
+      <DocumentStatisticsDialog />
+      <MarginsDialog />
+      <CustomPageSizeDialog />
     </>
   );
 }

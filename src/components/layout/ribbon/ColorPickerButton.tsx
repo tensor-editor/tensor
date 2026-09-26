@@ -11,11 +11,20 @@ import { ColorPicker } from '../../ui/color-picker';
 
 interface ColorPickerButtonProps {
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   defaultColor?: string;
   resetLabel?: string;
   onChange: (color: string | null) => void;
   shortcutId?: string;
+  /** Main button renders as a SOLID swatch of the active color and opens
+   * the palette (no apply-last-picked behavior). An unset/empty color
+   * shows the theme primary at reduced opacity. */
+  solidSwatch?: boolean;
+  /** Suppresses the reset/none button at the top of the palette. */
+  hideReset?: boolean;
+  /** Color the trigger swatch shows after reset (e.g. '#ffffff' when
+   * "default" means white paper). Unset = transparent/absent swatch. */
+  resetColor?: string;
 }
 
 export function ColorPickerButton({
@@ -25,6 +34,9 @@ export function ColorPickerButton({
   resetLabel = 'None',
   onChange,
   shortcutId,
+  solidSwatch = false,
+  hideReset = false,
+  resetColor,
 }: ColorPickerButtonProps) {
   const [open, setOpen] = useState(false);
   const [lastPicked, setLastPicked] = useState<string | null>(defaultColor);
@@ -37,7 +49,7 @@ export function ColorPickerButton({
   const removeCustomColor = useConfigStore((s) => s.removeCustomColor);
 
   function pick(color: string | null) {
-    setLastPicked(color);
+    setLastPicked(color ?? resetColor ?? null);
     onChange(color);
     setOpen(false);
   }
@@ -83,20 +95,30 @@ export function ColorPickerButton({
     );
   }
 
+  const mainIcon = solidSwatch ? (
+    <div
+      className="h-4 w-4 rounded-[3px] border border-border/60"
+      style={{
+        backgroundColor: lastPicked || 'var(--primary)',
+        opacity: lastPicked ? 1 : 0.45,
+      }}
+    />
+  ) : (
+    <div className="flex flex-col items-center">
+      {icon}
+      <div
+        className="h-0.75 w-4 rounded-sm border border-border/50"
+        style={{ backgroundColor: lastPicked ?? 'transparent' }}
+      />
+    </div>
+  );
+
   return (
     <div className="flex items-stretch">
       <IconButton
         label={label}
-        icon={
-          <div className="flex flex-col items-center">
-            {icon}
-            <div
-              className="h-0.75 w-4 rounded-sm border border-border/50"
-              style={{ backgroundColor: lastPicked ?? 'transparent' }}
-            />
-          </div>
-        }
-        onClick={() => onChange(lastPicked)}
+        icon={mainIcon}
+        onClick={solidSwatch ? () => setOpen(true) : () => onChange(lastPicked)}
         shortcutId={shortcutId}
       />
 
@@ -110,12 +132,14 @@ export function ColorPickerButton({
         />
         <PopoverContent className="w-auto p-2">
           <div className="flex flex-col gap-1">
-            <button
-              className="flex h-7 items-center justify-center rounded border border-border text-xs text-muted-foreground hover:bg-muted"
-              onClick={() => pick(null)}
-            >
-              {resetLabel}
-            </button>
+            {!hideReset && (
+              <button
+                className="flex h-7 items-center justify-center rounded border border-border text-xs text-muted-foreground hover:bg-muted"
+                onClick={() => pick(null)}
+              >
+                {resetLabel}
+              </button>
+            )}
 
             <span className="text-[11px] text-muted-foreground">Preset Colors</span>
             <div className="flex gap-1">{GRAYSCALE_ROW.map(renderSwatch)}</div>

@@ -12,6 +12,10 @@ const PageSetupSchema = z.object({
     right: z.number(),
   }),
   pageGap: z.number(),
+  orientation: z.enum(['portrait', 'landscape']).optional(),
+  pageColor: z.string().optional(),
+  customWidth: z.number().optional(),
+  customHeight: z.number().optional(),
 }) satisfies z.ZodType<PageSetup>;
 
 export const DocumentFileSchema = z.object({

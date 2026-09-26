@@ -23,6 +23,7 @@ import { scrollCaretIntoView } from '@/lib/paginated/caretFollow';
 import { setPaintedScrollHandler } from '@/lib/paginated/ScrollGuardExtension';
 import { searchPluginKey } from '@/lib/editor/search/SearchExtension';
 import { getScrollParent } from '@/lib/editor/domUtils';
+import { pasteFromSystemClipboard } from '@/lib/editor/clipboard';
 import type { FloatingToolbarPosition } from '@/lib/editor/useFloatingToolbar';
 import { toLayoutOptions } from '@/lib/document/pageSetup';
 import { useDocumentStore } from '@/lib/document/store';
@@ -349,8 +350,34 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     window.addEventListener('mouseup', onUp, { once: true });
   }
 
+  // Release-side belt-and-braces for the middle button: some engines
+  // paste the primary selection on mouseup or auxclick instead of the
+  // press (Firefox does). Killing the default there too makes "off"
+  // hold everywhere.
+  function swallowMiddleClick(e: React.MouseEvent) {
+    if (e.button === 1) e.preventDefault();
+  }
+
   function handleMouseDown(e: React.MouseEvent) {
     if (!editor || adapterError || !layout) return;
+    // Middle button: paste-on-middle-click (settings > General >
+    // Behavior). The webview's DEFAULT middle-click action on Linux
+    // pastes the X11 primary selection into the focused editable
+    // (WebKitGTK), so the press is preventDefaulted UNCONDITIONALLY —
+    // the toggle is the single source of truth. Off = nothing at all
+    // (native paste and autoscroll both die here); on = caret to the
+    // click point, then the system clipboard replays through PM's own
+    // paste handler.
+    if (e.button === 1) {
+      e.preventDefault();
+      if (!useConfigStore.getState().config.editor.pasteOnMiddleClick) return;
+      if (!editor || adapterError || !layout) return;
+      (editor.view.dom as HTMLElement).focus({ preventScroll: true });
+      const pos = pmPosAt(e);
+      if (pos != null) editor.commands.setTextSelection(pos);
+      void pasteFromSystemClipboard(editor);
+      return;
+    }
     e.preventDefault();
     // The hidden PM view receives keyboard focus with preventScroll: its
     // geometry is meaningless (L3), so letting the browser reveal its
@@ -772,6 +799,8 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
           position: 'relative',
         }}
         onMouseDown={handleMouseDown}
+        onMouseUp={swallowMiddleClick}
+        onAuxClick={swallowMiddleClick}
       >
         <div
           ref={stackRef}
@@ -793,6 +822,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                 geometry={page}
                 top={page.index * (pageH + gap)}
                 observeRef={observeSheet}
+                background={pageSetup.pageColor || undefined}
               >
                 {(visiblePages === null || visiblePages.has(page.index)) &&
                   pageGroups.map((group) => {

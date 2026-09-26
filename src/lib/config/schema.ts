@@ -29,6 +29,11 @@ export const ConfigSchema = z.object({
     /** Painted-selection background; '' = theme primary at selection
      * opacity (the default look). */
     selectionColor: z.string().default(''),
+    /** Display unit for measurement inputs (margins, page size). */
+    measurementUnit: z.enum(['inches', 'centimeters', 'millimeters', 'points', 'picas']).default('inches'),
+    /** Middle-click pastes the system clipboard at the click point
+     * (X11 primary-paste habit). Off = browser default. */
+    pasteOnMiddleClick: z.boolean().default(false),
   }).default({
     defaultFontFamily: 'system-ui',
     defaultFontSize: 16,
@@ -41,6 +46,8 @@ export const ConfigSchema = z.object({
     showNonPrintingChars: false,
     zoomLevel: 100,
     selectionColor: '',
+    measurementUnit: 'inches',
+    pasteOnMiddleClick: false,
   }),
   privacy: z.object({
     autoCheckForUpdates: z.boolean().default(false),
