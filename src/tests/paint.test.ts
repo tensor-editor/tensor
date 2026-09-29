@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { LineBox, Run } from '@tensor-editor/engine';
-import type { RunDecor } from '@/lib/paginated/adapter';
+import type { BlockPaint, RunDecor } from '@/lib/paginated/adapter';
 import { paintLines } from '@/lib/paginated/paint';
 import { alignOffset } from '@/lib/paginated/positionMap';
 import { FakeMetrics } from './fakeMetrics';
@@ -180,6 +180,170 @@ describe('paint: non-printing characters (M6 v1)', () => {
     const texts = ctx.ops.filter((o) => o.op === 'fillText');
     expect(texts).toHaveLength(1);
     expect(texts[0]!.args).toEqual(['¶', 0, 13]);
+  });
+
+  it('P1: the ¶ renders in the block\'s PLAIN style — bold/italic stripped', () => {
+    const ctx = makeCtx();
+    const box: LineBox = {
+      ...line(80),
+      rangeEnd: 2,
+      segments: [{ runIndex: 0, start: 0, end: 2 }],
+    };
+    const boldRuns: Run[] = [{ text: 'Hi', style: { ...STYLE, bold: true, italic: true } }];
+    paintLines(ctx as unknown as CanvasRenderingContext2D, [box], boldRuns, 'Hi', 0, FakeMetrics, {
+      align: 'left',
+      contentWidth: 624,
+      runDecor: [],
+      npc: true,
+      markerStyle: STYLE,
+    });
+    const texts = ctx.ops.filter((o) => o.op === 'fillText');
+    expect(texts.map((o) => o.args[0])).toEqual(['Hi', '¶']);
+    // The text is bold+italic; the ¶ is PLAIN (bold/italic stripped).
+    expect(texts[0]!.font).toBe('italic 700 16px Test Sans');
+    expect(texts[1]!.font).toBe('16px Test Sans');
+  });
+
+  it('P1: the ¶\'s size follows the block\'s effective style', () => {
+    const ctx = makeCtx();
+    const box: LineBox = {
+      ...line(80),
+      rangeEnd: 2,
+      segments: [{ runIndex: 0, start: 0, end: 2 }],
+    };
+    const bigRuns: Run[] = [{ text: 'Hi', style: { ...STYLE, fontSize: 24 } }];
+    paintLines(ctx as unknown as CanvasRenderingContext2D, [box], bigRuns, 'Hi', 0, FakeMetrics, {
+      align: 'left',
+      contentWidth: 624,
+      runDecor: [],
+      npc: true,
+      markerStyle: { fontFamily: 'Test Sans', fontSize: 24 },
+    });
+    const pilcrow = ctx.ops.find((o) => o.op === 'fillText' && o.args[0] === '¶')!;
+    expect(pilcrow.font).toBe('24px Test Sans');
+  });
+});
+
+describe('paint: block decor (M6.1 — markers, blockquote, code, rule)', () => {
+  const MARKER_STYLE = { fontFamily: 'Test Sans', fontSize: 16 };
+
+  function paintBox(
+    box: LineBox,
+    text: string,
+    paint: BlockPaint | undefined,
+    extra?: { contentWidth?: number }
+  ) {
+    const ctx = makeCtx();
+    const r: Run[] = text ? [{ text, style: STYLE }] : [];
+    paintLines(ctx as unknown as CanvasRenderingContext2D, [box], r, text, 0, FakeMetrics, {
+      align: 'left',
+      contentWidth: extra?.contentWidth ?? 624,
+      runDecor: [],
+      paint,
+      markerStyle: MARKER_STYLE,
+    });
+    return ctx;
+  }
+
+  function indentLine(indent: number, lineIndex = 0): LineBox {
+    return {
+      blockId: 'a',
+      lineIndex,
+      pageIndex: 0,
+      rect: { x: indent, y: 0, width: 60, height: 16 },
+      baseline: 13,
+      rangeStart: 0,
+      rangeEnd: 6,
+      segments: text ? [{ runIndex: 0, start: 0, end: 6 }] : [],
+    };
+  }
+  let text = 'aaaaaa';
+
+  it('bullet markers: every listStyleType glyph, left-aligned in the indent gutter', () => {
+    const cases: Array<[string, string]> = [
+      ['disc', '•'],
+      ['circle', '○'],
+      ['square', '▪'],
+    ];
+    for (const [styleType, glyph] of cases) {
+      const ctx = paintBox(indentLine(32), 'aaaaaa', {
+        marker: { kind: 'bullet', depth: 1, index: 1, styleType },
+      });
+      const marker = ctx.ops.find((o) => o.op === 'fillText' && o.args[0] === glyph)!;
+      expect(marker, styleType).toBeDefined();
+      // x = indent − 32 + 1 = 1; same baseline as the text.
+      expect(marker.args[1]).toBe(1);
+      expect(marker.args[2]).toBe(13);
+    }
+  });
+
+  it('ordered markers: every styleType spelling, right-aligned INTO the indent', () => {
+    const cases: Array<[string, number, string]> = [
+      // [styleType, index, expected text] — FakeMetrics: 10px/char.
+      ['decimal', 1, '1.'],
+      ['decimal', 27, '27.'],
+      ['lower-alpha', 1, 'a.'],
+      ['upper-alpha', 27, 'AA.'],
+      ['lower-roman', 1, 'i.'],
+      ['lower-roman', 4, 'iv.'],
+      ['upper-roman', 9, 'IX.'],
+    ];
+    for (const [styleType, index, expected] of cases) {
+      const ctx = paintBox(indentLine(32), 'aaaaaa', {
+        marker: { kind: 'ordered', depth: 1, index, styleType },
+      });
+      const marker = ctx.ops.find((o) => o.op === 'fillText' && o.args[0] === expected)!;
+      expect(marker, `${styleType} ${index}`).toBeDefined();
+      // Right edge at indent − 2: x = 32 − 2 − width.
+      expect(marker.args[1]).toBe(32 - 2 - expected.length * 10);
+    }
+  });
+
+  it('the marker paints ONLY on the block’s first line (fragments stay bare)', () => {
+    const ctx = makeCtx();
+    const lines: LineBox[] = [
+      indentLine(32, 0),
+      { ...indentLine(32, 1), rect: { x: 32, y: 16, width: 40, height: 16 } },
+    ];
+    paintLines(ctx as unknown as CanvasRenderingContext2D, lines, [{ text: 'aaaaaa', style: STYLE }], 'aaaaaa', 0, FakeMetrics, {
+      align: 'left',
+      contentWidth: 624,
+      runDecor: [],
+      paint: { marker: { kind: 'bullet', depth: 1, index: 1, styleType: 'disc' } },
+      markerStyle: MARKER_STYLE,
+    });
+    const bullets = ctx.ops.filter((o) => o.op === 'fillText' && o.args[0] === '•');
+    expect(bullets).toHaveLength(1);
+    expect(bullets[0]!.args[2]).toBe(13); // first line's baseline
+  });
+
+  it('blockquote: tinted full-width background + left border, per line', () => {
+    const ctx = paintBox(indentLine(32), 'aaaaaa', { blockquote: true });
+    const rects = ctx.ops.filter((o) => o.op === 'fillRect');
+    // Background: (0, y, contentWidth, height); border: (4, y, 3, height).
+    expect(rects[0]!.args).toEqual([0, 0, 624, 16]);
+    expect(rects[1]!.args).toEqual([4, 0, 3, 16]);
+    // Ink restored afterwards.
+    expect(ctx.fillStyle).toBe('#000');
+  });
+
+  it('code: full-width background per line', () => {
+    const ctx = paintBox({ ...indentLine(0), rect: { x: 0, y: 0, width: 60, height: 16 } }, 'aaaaaa', { code: true });
+    const rects = ctx.ops.filter((o) => o.op === 'fillRect');
+    expect(rects[0]!.args).toEqual([0, 0, 624, 16]);
+  });
+
+  it('rule: a 1px rule across the indent-narrowed content width', () => {
+    const ctx = paintBox({ ...indentLine(0), segments: [], rect: { x: 0, y: 0, width: 0, height: 16 } }, '', { rule: true });
+    const rects = ctx.ops.filter((o) => o.op === 'fillRect');
+    // y = round(0 + baseline 13 × 0.55) = 7.
+    expect(rects[0]!.args).toEqual([0, 7, 624, 1]);
+  });
+
+  it('no paint hints → no decor ops (plain block)', () => {
+    const ctx = paintBox(indentLine(0), 'aaaaaa', undefined);
+    expect(ctx.ops.filter((o) => o.op === 'fillRect')).toHaveLength(0);
+    expect(ctx.ops.filter((o) => o.op === 'fillText')).toHaveLength(1);
   });
 });
 

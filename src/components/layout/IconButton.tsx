@@ -28,6 +28,9 @@ export function IconButton({ label, icon, active, disabled, onClick, shortcutId 
               onClick={onClick}
               disabled={disabled}
               aria-label={label}
+              // `active` marks every current use a toggle state (bold,
+              // alignment, mode, ...) — announce it to AT.
+              {...(active !== undefined ? { 'aria-pressed': active } : {})}
             >
               {icon}
             </Button>

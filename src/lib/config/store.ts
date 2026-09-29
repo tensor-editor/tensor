@@ -13,6 +13,9 @@ interface ConfigStore {
   setSelectionColor: (value: string) => void;
   setMeasurementUnit: (value: Config["editor"]["measurementUnit"]) => void;
   setPasteOnMiddleClick: (value: boolean) => void;
+  /** 'Pages' = paginated (engine-driven PaginatedView); anything else
+   * (canonically 'Pageless') renders the pageless editing surface. */
+  setDefaultPageLayout: (value: Config["editor"]["defaultPageLayout"]) => void;
 
   setKeybinding: (id: string, keys: string) => void;
   resetKeybinding: (id: string) => void;
@@ -93,6 +96,14 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       config: {
         ...state.config,
         editor: { ...state.config.editor, pasteOnMiddleClick: value },
+      },
+    })),
+
+  setDefaultPageLayout: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, defaultPageLayout: value },
       },
     })),
 

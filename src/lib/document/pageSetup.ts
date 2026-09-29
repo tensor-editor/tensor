@@ -66,9 +66,20 @@ export function formatPt(pt: number, unit: MeasurementUnit): string {
   return String(Math.round((pt / meta.ptPer) * 100) / 100);
 }
 
-export function parseUnitToPt(raw: string, unit: MeasurementUnit): number | null {
+/**
+ * User input in the display unit → points. Returns null for
+ * unparseable/non-positive input — margins are the one caller that
+ * passes allowZero (a 0pt margin is legal: the content box then meets
+ * the sheet edge); page DIMENSIONS must stay positive.
+ */
+export function parseUnitToPt(
+  raw: string,
+  unit: MeasurementUnit,
+  opts?: { allowZero?: boolean }
+): number | null {
   const v = parseFloat(raw);
-  if (!Number.isFinite(v) || v <= 0) return null;
+  if (!Number.isFinite(v)) return null;
+  if (v < 0 || (v === 0 && !(opts?.allowZero ?? false))) return null;
   return Math.round(v * MEASUREMENT_UNITS[unit].ptPer);
 }
 

@@ -53,9 +53,11 @@ export function hitTest(
   const block = blocks.find((b) => b.id === line.blockId);
   if (!block) return null;
   const x = localX - cb.x;
-  // Same offset the painter and caret use — the nearest-line rule stays
-  // symmetric with the painted geometry for aligned lines.
-  let cursor = line.rect.x + alignOffset(block.align, line.rect.width, cb.width);
+  // Same offset the painter and caret use — the indent-narrowed box
+  // (rect.x IS indentLeft). A click in the marker GUTTER (x < indent)
+  // falls through the nearest-glyph loop and resolves to the item's
+  // first position — the nearest-line rule stays symmetric with paint.
+  let cursor = line.rect.x + alignOffset(block.align, line.rect.width, cb.width - line.rect.x);
   for (const seg of line.segments) {
     const run = block.runs[seg.runIndex];
     if (!run) continue;

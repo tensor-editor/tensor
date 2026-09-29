@@ -51,13 +51,28 @@ function createRealMetrics(): TextMetrics {
     let cached = verticalCache.get(key);
     if (!cached) {
       ctx.font = key;
-      // 'Hg' spans cap height and descender — a stable vertical
-      // representative for the style. actualBoundingBox* is unsupported in
-      // ancient engines; approximate rather than fail.
+      // P1 RECEIPT + RULING: the pre-P1 code measured
+      // actualBoundingBoxAscent/Descent of 'Hg' — the INK extent of two
+      // specific glyphs (cap-height to the g's descender, typically
+      // ~0.72em + ~0.21em) — which made every line box shorter than
+      // the font's own line box and let tall glyphs (or the CSS
+      // 'normal' line box) visually collide with neighbors.
+      // fontBoundingBoxAscent/Descent is the FULL font box — the
+      // convention behind CSS 'normal' line-height — so lines measure
+      // slightly taller (the exact delta is font-dependent; verify in
+      // the running app — jsdom has no canvas). Fallbacks approximate
+      // the font box (~0.8em ascent / ~0.2em descent), then the legacy
+      // ink-box numbers for engines without either.
       const m = ctx.measureText('Hg');
       cached = {
-        ascent: m.actualBoundingBoxAscent || style.fontSize * 0.8,
-        descent: m.actualBoundingBoxDescent || style.fontSize * 0.2,
+        ascent:
+          m.fontBoundingBoxAscent ||
+          m.actualBoundingBoxAscent ||
+          style.fontSize * 0.8,
+        descent:
+          m.fontBoundingBoxDescent ||
+          m.actualBoundingBoxDescent ||
+          style.fontSize * 0.2,
       };
       verticalCache.set(key, cached);
     }

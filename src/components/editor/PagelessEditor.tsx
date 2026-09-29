@@ -4,6 +4,7 @@ import { useLinkBubble } from "@/lib/editor/useLinkBubble";
 import { LinkBubble } from "./LinkBubble";
 import { TooltipProvider } from "../ui/tooltip";
 import { useConfigStore } from "@/lib/config/store";
+import { useDocumentStore } from "@/lib/document/store";
 import { FloatingToolbar } from "./FloatingToolbar";
 import { useFloatingToolbar } from "@/lib/editor/useFloatingToolbar";
 
@@ -21,6 +22,10 @@ export function PagelessEditor({ editor, fontFamily, fontSize }: PagelessEditorP
   const zoomLevel = useConfigStore((s) => s.config.editor.zoomLevel);
   const showFloatingToolbar = useConfigStore((s) => s.config.useFloatingToolbar);
   const floatingToolbarPosition = useFloatingToolbar(editor, showFloatingToolbar);
+  // One setting, two surfaces (M6.1 carryover): the document's page
+  // background paints the paginated SHEETS and this pageless editing
+  // SURFACE alike. Absent ('') = no background style.
+  const pageColor = useDocumentStore((s) => s.pageSetup.pageColor);
 
   return (
     <TooltipProvider>
@@ -32,7 +37,11 @@ export function PagelessEditor({ editor, fontFamily, fontSize }: PagelessEditorP
           transformOrigin: 'top center',
         }}
       >
-        <div className={`relative z-10 ${showNonPrintingChars ? "show-non-printing" : ""}`}>
+        <div
+          data-testid="pageless-surface"
+          className={`relative z-10 ${showNonPrintingChars ? "show-non-printing" : ""}`}
+          style={{ ...(pageColor ? { background: pageColor } : {}) }}
+        >
           <EditorContent
             editor={editor}
             className="prose prose-neutral min-h-100 focus:outline-none text-black"

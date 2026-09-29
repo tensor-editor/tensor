@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDocumentStore } from '@/lib/document/store';
 import { useDocumentPropertiesStore } from '@/lib/document/propertiesStore';
+import { useConfigStore } from '@/lib/config/store';
 import { PAGE_SIZES } from '@/lib/document/pageSetup';
 
 /**
@@ -17,13 +18,21 @@ import { PAGE_SIZES } from '@/lib/document/pageSetup';
  * Selecting "Custom…" only opens the CustomPageSizeDialog — the
  * document changes when the user confirms in the dialog (Done), not
  * at dropdown-selection time.
+ *
+ * PAGELESS MODE disables — but never removes — the PAGE GEOMETRY
+ * controls (paper size, orientation, margins): they are paginated
+ * facts with no pageless meaning. Page Background stays LIVE in both
+ * modes (one setting, two surfaces: paginated sheets and the pageless
+ * editing surface both paint pageSetup.pageColor).
  */
 export function PageSetupGroup() {
   const pageSetup = useDocumentStore((s) => s.pageSetup);
   const setPageSetup = useDocumentStore((s) => s.setPageSetup);
   const isLandscape = pageSetup.orientation === 'landscape';
+  const isPageless = useConfigStore((s) => s.config.editor.defaultPageLayout) !== 'Pages';
 
   function handlePageSizeChange(value: string) {
+    if (isPageless) return;
     if (value === 'custom') {
       useDocumentPropertiesStore.getState().openCustomSize();
       return;
@@ -39,6 +48,7 @@ export function PageSetupGroup() {
         label="Margins"
         icon={<RulerDimensionLine size={16} />}
         onClick={() => useDocumentPropertiesStore.getState().openMargins()}
+        disabled={isPageless}
       />
 
       <IconButton
@@ -47,6 +57,7 @@ export function PageSetupGroup() {
         onClick={() =>
           setPageSetup({ ...pageSetup, orientation: isLandscape ? 'portrait' : 'landscape' })
         }
+        disabled={isPageless}
       />
 
       <Tooltip>
@@ -54,11 +65,12 @@ export function PageSetupGroup() {
           render={
             <Select
               value={pageSetup.pageSize}
+              disabled={isPageless}
               onValueChange={(value) => {
                 if (value != null) handlePageSizeChange(value);
               }}
             >
-              <SelectTrigger className="mx-1.5 h-8 w-32 gap-1.5 text-sm">
+              <SelectTrigger aria-label="Paper Size" className="mx-1.5 h-8 w-32 gap-1.5 text-sm">
                 <Proportions size={14} className="shrink-0 text-muted-foreground" />
                 <SelectValue placeholder="Paper Size" />
               </SelectTrigger>

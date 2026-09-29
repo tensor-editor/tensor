@@ -84,11 +84,12 @@ export function MarginsDialog() {
     setDraft(snapshot(preset, unit));
   }
 
-  /** ONE commit → ONE reflow. Invalid fields keep the store's value. */
+  /** ONE commit → ONE reflow. Invalid fields keep the store's value;
+   * 0pt margins are legal (content box meets the sheet edge). */
   function apply() {
     const margins = { ...pageSetup.margins };
     for (const { key } of FIELDS) {
-      const pt = parseUnitToPt(draft[key], unit);
+      const pt = parseUnitToPt(draft[key], unit, { allowZero: true });
       if (pt != null && pt >= 0) margins[key] = pt;
     }
     setPageSetup({ ...pageSetup, margins });

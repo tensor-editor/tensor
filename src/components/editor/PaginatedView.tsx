@@ -4,7 +4,7 @@ import { EditorContent, type Editor } from '@tiptap/react';
 import type { Transaction } from '@tiptap/pm/state';
 import type { LayoutEngine, LayoutResult, LineBox, TextMetrics } from '@tensor-editor/engine';
 import { createLayoutEngine } from '@tensor-editor/engine';
-import { pmDocToSemantic, type AdapterBlock } from '@/lib/paginated/adapter';
+import { pmDocToSemantic, UnsupportedDocError, type AdapterBlock } from '@/lib/paginated/adapter';
 import { getRealMetrics, fontString } from '@/lib/paginated/metrics';
 import { assertContiguity } from '@/lib/paginated/paint';
 import {
@@ -14,6 +14,7 @@ import {
   caretStackRect,
   paintedBounds,
   textRangeLineRects,
+  textRangeTextExtents,
   wordRangeAround,
   type CaretGeometry,
   type PaintedRect,
@@ -28,6 +29,7 @@ import type { FloatingToolbarPosition } from '@/lib/editor/useFloatingToolbar';
 import { toLayoutOptions } from '@/lib/document/pageSetup';
 import { useDocumentStore } from '@/lib/document/store';
 import { useConfigStore } from '@/lib/config/store';
+import { ensureBlockIds } from '@/lib/editor/BlockIdExtension';
 import { PageSheet } from './paginated/PageSheet';
 import { BlockCanvas } from './paginated/BlockCanvas';
 import { SelectionHighlights } from './paginated/SelectionHighlights';
@@ -155,6 +157,13 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const showFloatingToolbar = useConfigStore((s) => s.config.useFloatingToolbar);
   // Display-only ink (M6): NPCs paint on screen; never a layout fact.
   const showNonPrintingChars = useConfigStore((s) => s.config.editor.showNonPrintingChars);
+  // Marker font fallback for EMPTY list items ("style from the block's
+  // runs" — no runs → document default). Memoized for BlockCanvas's
+  // prop-identity memo.
+  const defaultRunStyle = useMemo(
+    () => ({ fontFamily: defaultFontFamily, fontSize: defaultFontSize }),
+    [defaultFontFamily, defaultFontSize]
+  );
   const selectionColor = useConfigStore((s) => s.config.editor.selectionColor);
   const setPageInfo = useDocumentStore((s) => s.setPageInfo);
 
@@ -226,12 +235,12 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     const all: PaintedRect[] = [];
     for (const match of st.matches) {
       all.push(
-        ...textRangeLineRects(current.blocks, current.result, match.from, match.to, m, gap)
+        ...textRangeTextExtents(current.blocks, current.result, match.from, match.to, m, gap)
       );
     }
     const cur = st.currentIndex >= 0 ? st.matches[st.currentIndex] : undefined;
     const currentRects = cur
-      ? textRangeLineRects(current.blocks, current.result, cur.from, cur.to, m, gap)
+      ? textRangeTextExtents(current.blocks, current.result, cur.from, cur.to, m, gap)
       : [];
     setSearchPaint({ all, current: currentRects });
     if (st.currentIndex !== prevSearchIndexRef.current) {
@@ -254,6 +263,14 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     const pageSetupNow = useDocumentStore.getState().pageSetup;
     const { defaultFontFamily: family, defaultFontSize: size } =
       useConfigStore.getState().config.editor;
+    // ADAPTER-CONTRACT GUARD (M6.1 fallback audit): this view's mount
+    // effects run BEFORE the editor's onCreate (child effects first),
+    // so the FIRST relayout can race the BlockIdExtension's initial
+    // mint pass. The old blanket catch silently degraded every such
+    // race into a fallback boot; the sentinel-only catch exposed it.
+    // Running the idempotent mint pass here (a no-op once ids exist)
+    // makes the handoff contract true regardless of effect order.
+    ensureBlockIds(editor);
     try {
       const __t0 = performance.now();
       const adapted = pmDocToSemantic(editor.state.doc, {
@@ -281,8 +298,16 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
       updateSelectionProjection();
       updateSearchProjection(true);
     } catch (err) {
-      // Loud: the adapter/engine throw is the contract violation report;
-      // the fallback render is so a crash never eats the document.
+      // FALLBACK AUDIT (M6.1, CONVENTIONS.md): the pageless fallback
+      // catches ONLY the unsupported-kind sentinel — a document using
+      // a node the projection doesn't support yet degrades gracefully.
+      // Anything else is a real adapter/engine bug: rethrow in dev so
+      // it crashes LOUDLY (a silent degrade would hide it); prod keeps
+      // the never-eat-the-document fallback behind a loud console
+      // error. Blanket Error catches that swallow bugs are banned.
+      if (!(err instanceof UnsupportedDocError) && import.meta.env.DEV) {
+        throw err;
+      }
       console.error('[PaginatedView] layout failed; falling back to pageless rendering:', err);
       const error = err instanceof Error ? err : new Error(String(err));
       adapterErrorRef.current = error;
@@ -843,6 +868,8 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                         align={block.align}
                         runDecor={block.runDecor}
                         npc={showNonPrintingChars}
+                        paint={block.paint}
+                        markerStyle={block.runs[0]?.style ?? defaultRunStyle}
                       />
                     );
                   })}

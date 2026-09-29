@@ -140,19 +140,30 @@ describe('PaginatedView integration', () => {
     expect(caret.style.top).toBe('1184px');
   });
 
-  it('e. list doc -> loud adapter throw -> pageless fallback renders, no crash', async () => {
+  it('e. sentinel-only fallback: a hardBreak doc degrades to pageless; lists now render PAGINATED', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // M6.1 parity: lists PROJECT — a list doc renders sheets, no throw.
     const { editor } = renderTensor();
     await settle();
-
     act(() => {
       editor.commands.setContent('<ul><li>item one</li><li>item two</li></ul>');
     });
     await settle();
+    expect(pageSheets().length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-testid="paginated-fallback"]')).toBeNull();
 
-    // LOUD: the strict-kinds adapter throw surfaced on the console.
+    // The SENTINEL (fallback audit, CONVENTIONS.md): a hardBreak doc —
+    // the engine has no inline-break model yet — throws
+    // UnsupportedDocError and ONLY that class lands in the fallback.
+    act(() => {
+      editor.commands.setContent('<p>line one<br>line two</p>');
+    });
+    await settle();
     expect(
-      consoleError.mock.calls.some((c) => c.map(String).join(' ').includes('unsupported block kind'))
+      consoleError.mock.calls.some((c) =>
+        c.map(String).join(' ').includes('no inline-break model')
+      )
     ).toBe(true);
     // No crash: the fallback rendered — visible pageless content, no sheets.
     expect(document.querySelector('[data-testid="paginated-fallback"]')).not.toBeNull();

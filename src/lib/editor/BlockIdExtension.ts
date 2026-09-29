@@ -4,12 +4,14 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { nanoid } from 'nanoid';
 
 /**
- * Author-assigned, stable block ids on every top-level
- * paragraph/heading. The engine's LineBox/FragmentBreak records carry
- * `blockId` as the edit-survival identity ("author-assigned, stable
- * across edits by contract" — engine/src/types.ts), and its caches are
- * id-keyed, so the shell must guarantee two invariants before any
- * layout call:
+ * Author-assigned, stable block ids on every block the paginated
+ * projection turns into an engine Block — top-level paragraphs and
+ * headings, list items' inner paragraphs (at ANY nesting depth),
+ * blockquote bodies, codeBlocks, and horizontalRules. The engine's
+ * LineBox/FragmentBreak records carry `blockId` as the edit-survival
+ * identity ("author-assigned, stable across edits by contract" —
+ * engine/src/types.ts), and its caches are id-keyed, so the shell must
+ * guarantee two invariants before any layout call:
  *
  *  - MISSING ids are minted (legacy .wpdoc files saved before ids
  *    existed load through here — the "load pass" — and so does the
@@ -26,20 +28,23 @@ import { nanoid } from 'nanoid';
  * plugin is the shell-side guarantee, not the enforcement.
  */
 
-const ID_BEARING_KINDS = ['paragraph', 'heading'];
+const ID_BEARING_KINDS = ['paragraph', 'heading', 'codeBlock', 'horizontalRule'];
 
 /**
- * Mint ids for missing/duplicate top-level blocks INTO `tr` (positions
+ * Mint ids for missing/duplicate ID-bearing blocks INTO `tr` (positions
  * are doc-relative, so tr must belong to the same doc). Returns whether
  * anything was written. Shared by appendTransaction (every doc change)
  * and ensureBlockIds (editor creation / setContent-from-JSON paths that
  * never dispatch a doc-changed transaction the plugin would see).
+ * Full-tree walk (doc.descendants): list items' and blockquote bodies'
+ * paragraphs are ID-bearing too — the M6.1 projection gives every one
+ * of them an engine Block.
  */
 function mintIds(doc: PMNode, tr: Transaction): boolean {
   const seen = new Set<string>();
   let modified = false;
 
-  doc.forEach((node, offset) => {
+  doc.descendants((node, pos) => {
     if (!ID_BEARING_KINDS.includes(node.type.name)) return;
     const id = node.attrs.blockId;
     if (typeof id === 'string' && id && !seen.has(id)) {
@@ -50,7 +55,7 @@ function mintIds(doc: PMNode, tr: Transaction): boolean {
     // occurrence (the original, when the later one is a paste) keeps its id.
     const minted = nanoid();
     seen.add(minted);
-    tr.setNodeMarkup(offset, undefined, { ...node.attrs, blockId: minted });
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, blockId: minted });
     modified = true;
   });
 
