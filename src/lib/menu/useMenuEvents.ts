@@ -1,55 +1,25 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useDocumentStore } from '../document/store';
-import { useConfigStore } from '../config/store';
-import { pasteFromSystemClipboard } from '@/lib/editor/clipboard';
+import { getCommandByMenuEvent } from '@/lib/commands/registry';
 
+/**
+ * The native menu's web side. Every menu-event payload is dispatched
+ * through the command registry (registry.ts) — menu and palette run
+ * the same run() bodies, so they cannot drift. The registry's
+ * menuEventId keys are the Rust MenuItem ids (src-tauri/src/lib.rs);
+ * a payload with no registry entry is dropped (logged), never crashed.
+ */
 export function useMenuEvents() {
   useEffect(() => {
     const unlisten = listen<string>('menu-event', (event) => {
-      const id = event.payload;
-      const doc = useDocumentStore.getState();
-
-      switch (id) {
-        case 'menu-open':
-          doc.openFile();
-          break;
-        case 'menu-save':
-          doc.save();
-          break;
-        case 'menu-save-as':
-          doc.saveAs();
-          break;
-        case 'menu-undo':
-          doc.editor?.commands.undo();
-          break;
-        case 'menu-redo':
-          doc.editor?.commands.redo();
-          break;
-        case 'menu-cut':
-          document.execCommand('cut');
-          break;
-        case 'menu-copy':
-          document.execCommand('copy');
-          break;
-        case 'menu-paste':
-          if (doc.editor) void pasteFromSystemClipboard(doc.editor);
-          break;
-        case 'menu-toggle-dark-mode': {
-          const { config, setTheme } = useConfigStore.getState();
-          setTheme(config.theme === 'dark' ? 'light' : 'dark');
-          break;
-        }
-        case 'menu-quit':
-          getCurrentWindow().close();
-          break;
-        case 'menu-new':
-          // no "new document" concept exists yet — noted as a gap
-          // earlier; leaving as a no-op stub for now.
-          console.warn('New Document not yet implemented');
-          break;
+      const command = getCommandByMenuEvent(event.payload);
+      if (!command) {
+        console.warn(`No command registered for menu event: ${event.payload}`);
+        return;
       }
+      // hidden is a PALETTE-visibility filter only — the menu always
+      // dispatches (e.g. 'new' stub, quit).
+      void command.run();
     });
 
     return () => {

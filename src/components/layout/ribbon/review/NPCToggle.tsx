@@ -4,15 +4,10 @@ import { useConfigStore } from '@/lib/config/store';
 
 export function NonPrintingCharsToggle() {
   const enabled = useConfigStore((s) => s.config.editor.showNonPrintingChars);
-  const setConfig = useConfigStore.setState;
+  const setShowNonPrintingChars = useConfigStore((s) => s.setShowNonPrintingChars);
 
   function toggle() {
-    setConfig((state) => ({
-      config: {
-        ...state.config,
-        editor: { ...state.config.editor, showNonPrintingChars: !enabled },
-      },
-    }));
+    setShowNonPrintingChars(!enabled);
   }
 
   return (

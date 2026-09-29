@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { ConfigSchema, DEFAULT_CONFIG, type Config } from "./schema";
 import { SHORTCUTS } from "../shortcuts";
 
+export const ZOOM_MIN = 50;
+export const ZOOM_MAX = 200;
+
 interface ConfigStore {
   config: Config;
 
@@ -13,6 +16,10 @@ interface ConfigStore {
   setSelectionColor: (value: string) => void;
   setMeasurementUnit: (value: Config["editor"]["measurementUnit"]) => void;
   setPasteOnMiddleClick: (value: boolean) => void;
+  setShowNonPrintingChars: (value: boolean) => void;
+  /** Zoom law: clamp to [50, 200] (ZOOM_MIN/ZOOM_MAX — ZoomGroup's
+   *  constants, now the single spelling of the range). */
+  setZoomLevel: (value: number) => void;
   /** 'Pages' = paginated (engine-driven PaginatedView); anything else
    * (canonically 'Pageless') renders the pageless editing surface. */
   setDefaultPageLayout: (value: Config["editor"]["defaultPageLayout"]) => void;
@@ -96,6 +103,25 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       config: {
         ...state.config,
         editor: { ...state.config.editor, pasteOnMiddleClick: value },
+      },
+    })),
+
+  setShowNonPrintingChars: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: { ...state.config.editor, showNonPrintingChars: value },
+      },
+    })),
+
+  setZoomLevel: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        editor: {
+          ...state.config.editor,
+          zoomLevel: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value)),
+        },
       },
     })),
 

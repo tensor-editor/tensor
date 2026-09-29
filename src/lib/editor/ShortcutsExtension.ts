@@ -1,45 +1,10 @@
-import { Extension, type Editor } from '@tiptap/core';
+import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { useConfigStore } from '@/lib/config/store';
-import { useSearchStore } from '@/lib/editor/search/store';
-import { useSidebarStore } from '@/lib/layout/sidebarStore';
 import { useSettingsDialogStore } from '@/lib/settings/store';
-import { useLinkEditorStore } from '@/lib/editor/linkEditorStore';
+import { usePaletteStore } from '@/lib/palette/store';
 import { getEffectiveKeybinding, matchesShortcut, SHORTCUTS } from '@/lib/shortcuts';
-import { stepFontSize } from '@/lib/editor/fontSize';
-
-const EDITOR_COMMAND_MAP: Record<string, (editor: Editor) => boolean> = {
-  bold: (editor) => editor.commands.toggleBold(),
-  italic: (editor) => editor.commands.toggleItalic(),
-  underline: (editor) => editor.commands.toggleUnderline(),
-  strike: (editor) => editor.commands.toggleStrike(),
-  insertPageBreak: (editor) => editor.commands.insertPageBreak(),
-  alignLeft: (editor) => editor.commands.setTextAlign('left'),
-  alignCenter: (editor) => editor.commands.setTextAlign('center'),
-  alignRight: (editor) => editor.commands.setTextAlign('right'),
-  alignJustify: (editor) => editor.commands.setTextAlign('justify'),
-  unorderedList: (editor) => editor.commands.toggleBulletList(),
-  orderedList: (editor) => editor.commands.toggleOrderedList(),
-  increaseIndent: (editor) => editor.commands.increaseIndent(),
-  decreaseIndent: (editor) => editor.commands.decreaseIndent(),
-  clearFormatting: (editor) => editor.commands.clearFormatting(),
-  // ±2pt in chrome space, committed as px (fontSize.ts law).
-  fontSizeUp: (editor) => stepFontSize(editor, 1),
-  fontSizeDown: (editor) => stepFontSize(editor, -1),
-  find: () => {
-    const sidebarActive = useSidebarStore.getState().active?.id === 'search';
-    if (sidebarActive) {
-      useSearchStore.getState().bumpFocus();
-    } else {
-      useSearchStore.getState().open();
-    }
-    return true;
-  },
-  insertLink: () => {
-    useLinkEditorStore.getState().requestInsert();
-    return true;
-  },
-};
+import { EDITOR_COMMAND_MAP } from '@/lib/editor/editorCommands';
 
 export const DynamicShortcutsExtension = Extension.create({
   name: 'dynamicShortcuts',
@@ -52,8 +17,13 @@ export const DynamicShortcutsExtension = Extension.create({
         key: new PluginKey('dynamicShortcuts'),
         props: {
           handleKeyDown(_view, event) {
-            // Same reasoning as useAppShortcuts' identical guard.
+            // Same reasoning as useAppShortcuts' identical guard. NOTE
+            // THE SYMMETRY: this guard and useAppShortcuts' are written
+            // as a pair — any new "chrome surface suppresses editor
+            // shortcuts" condition (settings, palette) MUST be added to
+            // BOTH or keymap behavior silently forks by focus context.
             if (useSettingsDialogStore.getState().isOpen) return false;
+            if (usePaletteStore.getState().isOpen) return false;
 
             const { config } = useConfigStore.getState();
 

@@ -100,3 +100,21 @@ class IntersectionObserverStub {
 }
 (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = IntersectionObserverStub;
 (globalThis as { __IO?: typeof IntersectionObserverStub }).__IO = IntersectionObserverStub;
+// jsdom ships no ResizeObserver; cmdk's CommandList observes its own
+// height on mount (the palette renders CommandList). No-op stub keeps
+// the component renderable in jsdom.
+if (typeof (globalThis as { ResizeObserver?: unknown }).ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver =
+    ResizeObserverStub as unknown as typeof ResizeObserver;
+}
+
+// jsdom ships no scrollIntoView; cmdk scrolls its selected item into
+// view on mount/selection (the palette). No-op keeps it renderable.
+if (typeof (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView === 'undefined') {
+  (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView = () => {};
+}
