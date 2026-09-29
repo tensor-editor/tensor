@@ -420,6 +420,102 @@
     "repository": "https://github.com/oxc-project/oxc"
   },
   {
+    "name": "@radix-ui/primitive",
+    "version": "1.1.7",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-compose-refs",
+    "version": "1.1.5",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-context",
+    "version": "1.2.2",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-dialog",
+    "version": "1.1.23",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-dismissable-layer",
+    "version": "1.1.19",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-focus-guards",
+    "version": "1.1.6",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-focus-scope",
+    "version": "1.1.16",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-id",
+    "version": "1.1.4",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-portal",
+    "version": "1.1.17",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-presence",
+    "version": "1.1.10",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-primitive",
+    "version": "2.1.10",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-slot",
+    "version": "1.3.3",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-use-callback-ref",
+    "version": "1.1.4",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-use-controllable-state",
+    "version": "1.2.6",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-use-effect-event",
+    "version": "0.0.5",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
+    "name": "@radix-ui/react-use-layout-effect",
+    "version": "1.1.4",
+    "license": "MIT",
+    "repository": "https://github.com/radix-ui/primitives"
+  },
+  {
     "name": "@rolldown/binding-linux-x64-gnu",
     "version": "1.2.7",
     "license": "MIT",
@@ -858,6 +954,12 @@
     "repository": "https://github.com/nodeca/argparse"
   },
   {
+    "name": "aria-hidden",
+    "version": "1.2.6",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/aria-hidden"
+  },
+  {
     "name": "array-find-index",
     "version": "1.0.2",
     "license": "MIT",
@@ -1000,6 +1102,12 @@
     "version": "8.0.0",
     "license": "ISC",
     "repository": "https://github.com/npm/cmd-shim"
+  },
+  {
+    "name": "cmdk",
+    "version": "1.1.1",
+    "license": "MIT",
+    "repository": "https://github.com/pacocoursey/cmdk"
   },
   {
     "name": "cn",
@@ -1162,6 +1270,12 @@
     "version": "2.1.2",
     "license": "Apache-2.0",
     "repository": "https://github.com/lovell/detect-libc"
+  },
+  {
+    "name": "detect-node-es",
+    "version": "1.1.0",
+    "license": "MIT",
+    "repository": "https://github.com/thekashey/detect-node"
   },
   {
     "name": "diff",
@@ -1432,6 +1546,12 @@
     "version": "1.3.0",
     "license": "MIT",
     "repository": "https://github.com/ljharb/get-intrinsic"
+  },
+  {
+    "name": "get-nonce",
+    "version": "1.0.1",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/get-nonce"
   },
   {
     "name": "get-own-enumerable-keys",
@@ -2562,6 +2682,24 @@
     "repository": "https://github.com/react/react"
   },
   {
+    "name": "react-remove-scroll",
+    "version": "2.7.2",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/react-remove-scroll"
+  },
+  {
+    "name": "react-remove-scroll-bar",
+    "version": "2.3.8",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/react-remove-scroll-bar"
+  },
+  {
+    "name": "react-style-singleton",
+    "version": "2.2.3",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/react-style-singleton"
+  },
+  {
     "name": "read-cmd-shim",
     "version": "6.0.0",
     "license": "ISC",
@@ -3022,6 +3160,18 @@
     "version": "1.3.3",
     "license": "MIT",
     "repository": "https://github.com/browserslist/update-db"
+  },
+  {
+    "name": "use-callback-ref",
+    "version": "1.3.3",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/use-callback-ref"
+  },
+  {
+    "name": "use-sidecar",
+    "version": "1.1.3",
+    "license": "MIT",
+    "repository": "https://github.com/theKashey/use-sidecar"
   },
   {
     "name": "use-sync-external-store",

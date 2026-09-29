@@ -17,9 +17,9 @@ export interface ShortcutDefinition {
 export const SHORTCUTS: ShortcutDefinition[] = [
   { id: 'save', label: 'Save', keys: 'ctrl+s', context: 'app', category: 'General' },
   { id: 'openSettings', label: 'Open Settings', keys: 'ctrl+,', context: 'app', category: 'General' },
+  { id: 'palette', label: 'Command Palette', keys: 'ctrl+shift+p', context: 'app', category: 'General' },
   { id: 'undo', label: 'Undo', keys: 'ctrl+z', context: 'os', category: 'General' },
   { id: 'redo', label: 'Redo', keys: 'ctrl+y', context: 'os', category: 'General' },
-  { id: 'insertPageBreak', label: 'Insert Page Break', keys: 'ctrl+enter', context: 'editor', category: 'General' },
 
   { id: 'find', label: 'Find & Replace', keys: 'ctrl+f', context: 'editor', category: 'Search' },
 
@@ -32,6 +32,7 @@ export const SHORTCUTS: ShortcutDefinition[] = [
   { id: 'fontSizeDown', label: 'Decrease Font Size', keys: 'ctrl+shift+,', context: 'editor', category: 'Formatting' },
 
   { id: 'insertLink', label: 'Hyperlink', keys: 'ctrl+k', context: 'editor', category: 'Insert' },
+  { id: 'insertPageBreak', label: 'Page Break', keys: 'ctrl+enter', context: 'editor', category: 'Insert' },
 
   { id: 'alignLeft', label: 'Align Left', keys: 'ctrl+shift+l', context: 'editor', category: 'Paragraphs' },
   { id: 'alignCenter', label: 'Align Center', keys: 'ctrl+shift+e', context: 'editor', category: 'Paragraphs' },

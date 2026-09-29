@@ -6,23 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useConfigStore } from '@/lib/config/store';
 
-const ZOOM_MIN = 50;
-const ZOOM_MAX = 200;
 const ZOOM_STEP = 10;
 const ZOOM_PRESETS = [50, 75, 100, 125, 150, 200];
 
 export function ZoomGroup() {
   const zoom = useConfigStore((s) => s.config.editor.zoomLevel);
-
-  function setZoom(value: number) {
-    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
-    useConfigStore.setState((state) => ({
-      config: {
-        ...state.config,
-        editor: { ...state.config.editor, zoomLevel: clamped },
-      },
-    }));
-  }
+  const setZoom = useConfigStore((s) => s.setZoomLevel);
 
   return (
     <RibbonGroup>

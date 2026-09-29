@@ -7,6 +7,8 @@ import { DocumentPropertiesDialog } from './components/dialogs/DocumentPropertie
 import { MarginsDialog } from './components/dialogs/MarginsDialog';
 import { DocumentStatisticsDialog } from './components/dialogs/DocumentStatisticsDialog';
 import { CustomPageSizeDialog } from './components/dialogs/CustomPageSizeDialog';
+import { StyleDialog } from './components/dialogs/StyleDialog';
+import { CommandPalette } from './components/palette/CommandPalette';
 import { useConfigStore } from './lib/config/store';
 import { useConfigPersistence } from './lib/config/useConfigPersistence';
 import './index.css';
@@ -14,6 +16,7 @@ import { useAppShortcuts } from './lib/shortcuts/useAppShortcuts';
 import { useAutosave } from './lib/document/useAutosave';
 import { useMenuEvents } from './lib/menu/useMenuEvents';
 import { useStyleRegistryStore } from './lib/styles/registry';
+import { useStyleDialogStore } from './lib/styles/dialogStore';
 import { StatusBar } from './components/layout/StatusBar';
 import { Ribbon } from './components/layout/Ribbon';
 import { SidebarHost } from './lib/layout/sidebar/SidebarHost';
@@ -105,6 +108,7 @@ function App() {
   }, []);
 
   const theme = useConfigStore((s) => s.config.theme);
+  const styleDialog = useStyleDialogStore();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -128,6 +132,8 @@ function App() {
         <StatusBar />
       </main>
       <SettingsDialog />
+      <CommandPalette />
+      <StyleDialog state={styleDialog} onClose={styleDialog.close} />
       <DocumentPropertiesDialog />
       <DocumentStatisticsDialog />
       <CustomPageSizeDialog />

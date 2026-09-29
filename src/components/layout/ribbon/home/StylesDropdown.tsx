@@ -7,7 +7,7 @@ import type { Editor } from '@tiptap/core';
 import { useStyleRegistryStore } from '@/lib/styles/registry';
 import { headingStyleId, type StyleDefinition } from '@/lib/styles/types';
 import { inlineStyle } from '@/lib/styles/resolve';
-import { StyleDialog, type StyleDialogState } from '@/components/dialogs/StyleDialog';
+import { useStyleDialogStore } from '@/lib/styles/dialogStore';
 
 /**
  * M-STYLES STEP 4. The dropdown lists the merged registry (built-ins +
@@ -35,11 +35,7 @@ function stylePreviewStyle(def: StyleDefinition): React.CSSProperties {
 
 export function StylesDropdown({ editor }: { editor: Editor }) {
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<StyleDialogState>({
-    open: false,
-    editingId: null,
-    kind: 'paragraph',
-  });
+  const openStyleDialog = useStyleDialogStore((s) => s.openDialog);
   const merged = useStyleRegistryStore((s) => s.merged);
 
   const active = useEditorState({
@@ -68,7 +64,7 @@ export function StylesDropdown({ editor }: { editor: Editor }) {
 
   const openDialog = (editingId: string | null, kind: 'paragraph' | 'character') => {
     setOpen(false);
-    setDialog({ open: true, editingId, kind });
+    openStyleDialog(editingId, kind);
   };
 
   const applyParagraph = (def: StyleDefinition) => {
@@ -160,7 +156,6 @@ export function StylesDropdown({ editor }: { editor: Editor }) {
           </div>
         </PopoverContent>
       </Popover>
-      <StyleDialog state={dialog} onClose={() => setDialog((d) => ({ ...d, open: false }))} />
     </>
   );
 }
