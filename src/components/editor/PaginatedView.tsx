@@ -29,7 +29,10 @@ import type { FloatingToolbarPosition } from '@/lib/editor/useFloatingToolbar';
 import { toLayoutOptions } from '@/lib/document/pageSetup';
 import { useDocumentStore } from '@/lib/document/store';
 import { useConfigStore } from '@/lib/config/store';
+import { useStyleRegistryStore } from '@/lib/styles/registry';
+import { resolveNormalBase } from '@/lib/styles/resolve';
 import { ensureBlockIds } from '@/lib/editor/BlockIdExtension';
+import { ensureStyleSync } from '@/lib/styles/styleExtensions';
 import { PageSheet } from './paginated/PageSheet';
 import { BlockCanvas } from './paginated/BlockCanvas';
 import { SelectionHighlights } from './paginated/SelectionHighlights';
@@ -90,6 +93,11 @@ interface PaginatedViewProps {
 interface LayoutState {
   blocks: AdapterBlock[];
   result: LayoutResult;
+  /** Registry epoch this layout was built under — rides the STATE (not
+   * a separate subscription) so BlockCanvas's epoch-keyed repaint can
+   * never fire ahead of the relayout that owns it (a stale intermediate
+   * paint of pre-edit ink). */
+  styleEpoch: number;
 }
 
 interface SearchPaint {
@@ -153,6 +161,12 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const pageSetup = useDocumentStore((s) => s.pageSetup);
   const defaultFontFamily = useConfigStore((s) => s.config.editor.defaultFontFamily);
   const defaultFontSize = useConfigStore((s) => s.config.editor.defaultFontSize);
+  // REGISTRY EPOCH (M-STYLES): a definition edit bumps the epoch and
+  // this effect relayouts — the adapter cache invalidates wholesale
+  // (re-resolved runs/decor on every block) and the engine re-breaks
+  // exactly the blocks whose contentHash changed (or splices the
+  // paint-only ones; BlockCanvas's epoch key repaints those).
+  const styleEpoch = useStyleRegistryStore((s) => s.epoch);
   const zoomLevel = useConfigStore((s) => s.config.editor.zoomLevel);
   const showFloatingToolbar = useConfigStore((s) => s.config.useFloatingToolbar);
   // Display-only ink (M6): NPCs paint on screen; never a layout fact.
@@ -263,6 +277,13 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     const pageSetupNow = useDocumentStore.getState().pageSetup;
     const { defaultFontFamily: family, defaultFontSize: size } =
       useConfigStore.getState().config.editor;
+    const registryNow = useStyleRegistryStore.getState();
+    // baseStyle := resolve('normal') from the merged registry
+    // (amendment 6): unedited 'normal' falls to the config defaults;
+    // an edited 'normal' overrides them — and baseStyle's existing
+    // baseStyleHash path carries the change wholesale into the engine
+    // (empty lines measure under baseStyle, so they restyle too).
+    const baseStyle = resolveNormalBase(family, size, registryNow.merged);
     // ADAPTER-CONTRACT GUARD (M6.1 fallback audit): this view's mount
     // effects run BEFORE the editor's onCreate (child effects first),
     // so the FIRST relayout can race the BlockIdExtension's initial
@@ -270,21 +291,33 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     // race into a fallback boot; the sentinel-only catch exposed it.
     // Running the idempotent mint pass here (a no-op once ids exist)
     // makes the handoff contract true regardless of effect order.
+    // The heading styleId sync is the same load-path twin.
     ensureBlockIds(editor);
+    ensureStyleSync(editor);
     try {
       const __t0 = performance.now();
-      const adapted = pmDocToSemantic(editor.state.doc, {
-        fontFamily: family,
-        fontSize: size,
+      const adapted = pmDocToSemantic(editor.state.doc, baseStyle, {
+        definitions: registryNow.merged,
+        epoch: registryNow.epoch,
       });
       const result = engineRef.current!.layout(adapted.doc, toLayoutOptions(pageSetupNow));
       // Permanent benchmark seam: total relayout time, readable
-      // by the self-driving bench and the coalescing test.
-      const __w = globalThis as { __benchRelayouts?: { relayouts: Array<{ total: number; at: number }> } };
+      // by the self-driving bench and the coalescing test. The
+      // engine's lastStats ride along (M-STYLES acceptance receipt —
+      // devtools-quotable without touching engine internals).
+      const __w = globalThis as {
+        __benchRelayouts?: {
+          relayouts: Array<{ total: number; at: number; lastStats?: unknown }>;
+        };
+      };
       __w.__benchRelayouts ??= { relayouts: [] };
-      __w.__benchRelayouts.relayouts.push({ total: performance.now() - __t0, at: performance.now() });
+      __w.__benchRelayouts.relayouts.push({
+        total: performance.now() - __t0,
+        at: performance.now(),
+        lastStats: { ...engineRef.current!.lastStats },
+      });
       assertContiguity(result);
-      const next: LayoutState = { blocks: adapted.blocks, result };
+      const next: LayoutState = { blocks: adapted.blocks, result, styleEpoch: registryNow.epoch };
       layoutRef.current = next;
       // No flushSync — React batches setLayout calls
       // from N input events into ONE render + ONE useLayoutEffect paint
@@ -563,12 +596,14 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     };
   }, [editor]);
 
-  // Store-driven reflow (A4 -> Letter, default font changes) relayouts
-  // WITHOUT remounting the view: the engine stays warm, its
-  // opts-invalidation path handles the geometry change.
+  // Store-driven reflow (A4 -> Letter, default font changes, registry
+  // epoch bumps) relayouts WITHOUT remounting the view: the engine
+  // stays warm, its opts-invalidation path handles the geometry
+  // change, the adapter's epoch-tagged identity cache handles the
+  // registry change.
   useEffect(() => {
     relayoutRef.current();
-  }, [pageSetup, defaultFontFamily, defaultFontSize]);
+  }, [pageSetup, defaultFontFamily, defaultFontSize, styleEpoch]);
 
   // One IntersectionObserver over all sheets. Visible
   // (±1 buffer) pages mount canvases; the sheet with the highest
@@ -870,6 +905,7 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                         npc={showNonPrintingChars}
                         paint={block.paint}
                         markerStyle={block.runs[0]?.style ?? defaultRunStyle}
+                        styleEpoch={layout.styleEpoch}
                       />
                     );
                   })}

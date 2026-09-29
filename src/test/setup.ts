@@ -37,17 +37,23 @@ if (typeof (globalThis as { DataTransfer?: unknown }).DataTransfer === 'undefine
 type StubRecord = Record<string, unknown>;
 
 // Recorded canvas ops, readable by tests via (globalThis as any).__paintOps
-// (reset it before the assertion window).
-const paintOps: Array<{ op: string; args: unknown[] }> = [];
+// (reset it before the assertion window). fillStyle rides along so
+// style-color edits are assertable (M-STYLES paint-only epoch).
+const paintOps: Array<{ op: string; args: unknown[]; fillStyle?: string; font?: string }> = [];
 (globalThis as { __paintOps?: typeof paintOps }).__paintOps = paintOps;
 
 const stubContext: StubRecord = {
   canvas: null,
   fillStyle: '#000',
   font: '',
+  fontVariantCaps: 'normal',
   textAlign: 'left',
-  fillText: (...args: unknown[]) => paintOps.push({ op: 'fillText', args }),
-  fillRect: (...args: unknown[]) => paintOps.push({ op: 'fillRect', args }),
+  fillText: function (this: StubRecord, ...args: unknown[]) {
+    paintOps.push({ op: 'fillText', args, fillStyle: this.fillStyle as string, font: this.font as string });
+  },
+  fillRect: function (this: StubRecord, ...args: unknown[]) {
+    paintOps.push({ op: 'fillRect', args, fillStyle: this.fillStyle as string });
+  },
   clearRect: () => {},
   setTransform: () => {},
   measureText: (text: string) => ({

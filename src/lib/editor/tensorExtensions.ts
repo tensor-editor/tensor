@@ -20,6 +20,7 @@ import {
   TextAlignNoShortcut,
 } from '@/lib/editor/RemoveDefShortcuts';
 import { BlockIdExtension } from '@/lib/editor/BlockIdExtension';
+import { CharStyleMark, StyleCommandsExtension } from '@/lib/styles/styleExtensions';
 import { ScrollGuardExtension } from '@/lib/paginated/ScrollGuardExtension';
 import { PageBreakNode } from '@/lib/pagination/PageBreakNode';
 
@@ -50,6 +51,10 @@ export function tensorExtensions(): Extensions {
     Color,
     Highlight.configure({ multicolor: true }),
     FontSize,
+    // M-STYLES: the charStyle mark (registry reference; one per span)
+    // + apply/convert commands + the reactive heading-sync plugin.
+    CharStyleMark,
+    StyleCommandsExtension,
     TextAlignNoShortcut.configure({ types: ['heading', 'paragraph'] }),
     ParagraphWithExtras,
     HeadingWithExtras,

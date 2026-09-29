@@ -9,6 +9,18 @@ import type {
   TextStyle,
 } from '@tensor-editor/engine';
 import type { TextAlign } from './positionMap';
+import type { StyleDefinition, StyleRegistrySnapshot } from '@/lib/styles/types';
+import { headingStyleId } from '@/lib/styles/types';
+import { builtinDefinitionsById } from '@/lib/styles/builtins';
+import { lookupStyle } from '@/lib/styles/registry';
+import {
+  baselineRunStyle,
+  resolveBlockTier,
+  resolveRun,
+  transformText,
+  type BlockTierAttrs,
+  type RunStyle,
+} from '@/lib/styles/resolve';
 export type { TextAlign } from './positionMap';
 
 /**
@@ -125,17 +137,15 @@ export interface AdapterResult {
 }
 
 /**
- * Level-based default styles arrive from the ADAPTER, never the engine
- * (engine layout.ts: "level is not a layout input here").
- * Word-approximate multiples of the 16px base.
+ * The default registry for call sites that predate M-STYLES: the code
+ * builtins alone. Heading levels resolve through their built-in
+ * definitions (the old HEADING_DEFAULTS values, verbatim) and
+ * paragraphs carry styleId 'normal' (no properties) — behavior
+ * identical to the pre-registry adapter.
  */
-const HEADING_DEFAULTS: Record<number, { fontSize: number; bold: true }> = {
-  1: { fontSize: 32, bold: true },
-  2: { fontSize: 24, bold: true },
-  3: { fontSize: 19, bold: true },
-  4: { fontSize: 16, bold: true },
-  5: { fontSize: 13, bold: true },
-  6: { fontSize: 11, bold: true },
+const BUILTIN_REGISTRY: StyleRegistrySnapshot = {
+  definitions: builtinDefinitionsById(),
+  epoch: 0,
 };
 
 // Dropped-attr policy: these PM attributes/marks have no representation
@@ -189,7 +199,7 @@ interface CachedConversion {
 
 const nodeCache = new WeakMap<PMNode, CachedConversion>();
 let cacheGeneration = 0;
-let lastStyleKey: string | null = null;
+let lastContextKey: string | null = null;
 
 /** Sibling-fact equality for the identity cache's reuse test. */
 function paintEqual(a: BlockPaint | undefined, b: BlockPaint | undefined): boolean {
@@ -339,32 +349,6 @@ function ownIndentRight(node: PMNode): number {
   return raw;
 }
 
-/** firstLineIndent (px, may be negative) clamped so the FIRST LINE's
- * left edge stays ≥ 0: totalLeft + firstLineIndent ≥ 0 — the exact
- * sum the engine throws on, validated here instead. */
-function ownFirstLineIndent(node: PMNode, totalLeft: number): number | undefined {
-  const raw = parseIndentPx(node.attrs?.firstLineIndent);
-  if (raw === 0) return undefined;
-  if (totalLeft + raw < 0) {
-    warnIndentClamp(
-      `firstLineIndent ${raw} under indentLeft ${totalLeft} → ${-totalLeft} (first line left edge floored at 0)`
-    );
-    return totalLeft > 0 ? -totalLeft : undefined;
-  }
-  return raw;
-}
-
-/**
- * PM spaceBefore/spaceAfter attrs (numbers, px — the schema stores
- * CSS px values, same unit the engine consumes) → engine block-tier
- * spacing. Non-positive/NaN → undefined: the walk treats undefined as
- * 0, and undefined keeps the engine's contentHash free of no-op keys.
- */
-function parseSpacing(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
-  return undefined;
-}
-
 /** How a PM node projects into the engine's Block union. */
 interface Projection {
   kind: 'paragraph' | 'heading' | 'codeBlock';
@@ -385,8 +369,8 @@ interface Projection {
  * lines under the first run's style, so blank lines are exactly as
  * tall as their siblings.
  */
-function codeRuns(node: PMNode, baseStyle: TextStyle): { runs: Run[]; text: string } {
-  const style: TextStyle = { fontFamily: 'monospace', fontSize: baseStyle.fontSize };
+function codeRuns(node: PMNode, base: RunStyle): { runs: Run[]; text: string } {
+  const style: TextStyle = { fontFamily: 'monospace', fontSize: base.fontSize };
   const runs: Run[] = [];
   let text = '';
   node.forEach((child) => {
@@ -407,32 +391,66 @@ function codeRuns(node: PMNode, baseStyle: TextStyle): { runs: Run[]; text: stri
   return { runs, text };
 }
 
+/** The resolved RunStyle → the engine's TextStyle. bold/italic are
+ * always-present booleans (the non-empty-run contract the tests
+ * pin); lineHeight passes through verbatim — a direct attr's '1'
+ * stays 1, an absent attr AND absent tier stays absent (the engine's
+ * absent ≡ 1.0 bit-for-bit invariant), a style-provided value wins
+ * when the attr is unset. fontVariant 'normal' is stripped (explicit
+ * 'normal' hashes ≠ absent — engine tests/font-variant.test.ts pins
+ * the seam ruling: the shell normalizes). */
+function textStyleOf(resolved: RunStyle, lineHeight: number | undefined, withBoldItalic = true): TextStyle {
+  return {
+    fontFamily: resolved.fontFamily,
+    fontSize: resolved.fontSize,
+    ...(withBoldItalic ? { bold: resolved.bold, italic: resolved.italic } : {}),
+    ...(lineHeight !== undefined ? { lineHeight } : {}),
+    ...(resolved.fontVariant === 'small-caps' ? { fontVariant: 'small-caps' as const } : {}),
+  };
+}
+
 /** The per-node conversion (the expensive part): runs, marks, decor,
  * text, align, spacing, indent, hints. Cached on the node object (see
  * CachedConversion for the sibling-fact reuse test). PM positions
  * (from/to) are deliberately NOT cached — they depend on preceding
- * siblings and are recomputed per call (cheap). */
+ * siblings and are recomputed per call (cheap).
+ *
+ * M-STYLES: all style resolution flows through resolve.ts resolveRun /
+ * resolveBlockTier (THE one function) with the registry snapshot —
+ * baseStyle < paragraph style < charStyle < direct marks, per
+ * property. */
 function convertNode(
   node: PMNode,
   projection: Projection,
   blockId: string,
-  baseStyle: TextStyle,
+  base: RunStyle,
+  definitions: Record<string, StyleDefinition>,
   dropped: Set<string>
 ): CachedConversion {
   const kind = projection.kind;
-  const headingDefault =
-    kind === 'heading' ? HEADING_DEFAULTS[node.attrs.level ?? 1] : undefined;
+
+  // The paragraph tier's style identity. Headings resolve through
+  // `heading-{level}` — the styleId attr's guaranteed twin (the
+  // HeadingSync plugin maintains the alignment); paragraphs through
+  // their styleId attr ('normal' default, schema-guaranteed).
+  const paraDef =
+    kind === 'heading'
+      ? lookupStyle(headingStyleId(node.attrs.level ?? 1), definitions)
+      : lookupStyle(
+          typeof node.attrs?.styleId === 'string' && node.attrs.styleId
+            ? node.attrs.styleId
+            : 'normal',
+          definitions
+        );
 
   const runs: Run[] = [];
   const runDecor: RunDecor[] = [];
   let text = '';
 
   const alignAttr = node.attrs?.textAlign;
-  const align: TextAlign =
-    alignAttr === 'center' || alignAttr === 'right' ? alignAttr : 'left';
 
   if (kind === 'codeBlock') {
-    const code = codeRuns(node, baseStyle);
+    const code = codeRuns(node, base);
     runs.push(...code.runs);
     text = code.text;
     // EMPTY-TEXTBLOCK INHERITANCE (P1): an empty codeBlock emits one
@@ -440,7 +458,7 @@ function convertNode(
     // measures present-run styles over baseStyle (P1 ruling), so the
     // blank line matches its mono siblings, not the prose default.
     if (runs.length === 0) {
-      runs.push({ text: '', style: { fontFamily: 'monospace', fontSize: baseStyle.fontSize } });
+      runs.push({ text: '', style: { fontFamily: 'monospace', fontSize: base.fontSize } });
     }
   } else {
     node.forEach((child) => {
@@ -466,18 +484,45 @@ function convertNode(
             ? textStyleMark.attrs.fontFamily
             : null;
 
-      const fontSize =
+      const fontSizeAttr =
         textStyleMark?.attrs?.fontSize != null
-          ? parseFontSize(textStyleMark.attrs.fontSize, baseStyle.fontSize)
-          : headingDefault?.fontSize ?? baseStyle.fontSize;
+          ? parseFontSize(textStyleMark.attrs.fontSize, base.fontSize)
+          : undefined;
 
-      const style: TextStyle = {
-        fontFamily: familyAttr ?? baseStyle.fontFamily,
-        fontSize,
-        bold: child.marks.some((m) => m.type.name === 'bold') || headingDefault?.bold,
-        italic: child.marks.some((m) => m.type.name === 'italic'),
-        lineHeight: parseLineHeight(node.attrs?.lineHeight, fontSize),
+      // The charStyle mark: a registry reference, resolved alongside
+      // the formatting marks (stacks with them, never stamps).
+      const charStyleMark = child.marks.find((m) => m.type.name === 'charStyle');
+      const charDef =
+        typeof charStyleMark?.attrs?.styleId === 'string' && charStyleMark.attrs.styleId
+          ? lookupStyle(charStyleMark.attrs.styleId, definitions)
+          : null;
+
+      // DIRECT MARKS (strongest tier).
+      const direct = {
+        ...(familyAttr ? { fontFamily: familyAttr } : {}),
+        ...(fontSizeAttr != null ? { fontSize: fontSizeAttr } : {}),
+        ...(child.marks.some((m) => m.type.name === 'bold') ? { bold: true } : {}),
+        ...(child.marks.some((m) => m.type.name === 'italic') ? { italic: true } : {}),
+        ...(child.marks.some((m) => m.type.name === 'underline') ? { underline: true } : {}),
+        ...(child.marks.some((m) => m.type.name === 'strike') ? { strike: true } : {}),
+        ...(typeof textStyleMark?.attrs?.color === 'string' && textStyleMark.attrs.color
+          ? { color: textStyleMark.attrs.color }
+          : {}),
       };
+
+      // ONE resolution function (resolve.ts): baseStyle < paragraph
+      // style < charStyle < direct marks, per property, complete
+      // values — the registry never leaves a property undefined.
+      const resolved = resolveRun({ base, para: paraDef, char: charDef, direct });
+
+      // Direct BLOCK formatting (the lineHeight attr) parses against
+      // the RESOLVED font size (CSS: absolute units are relative to
+      // the element's own size) and beats the char/para tiers. The
+      // attr value passes through VERBATIM (1 stays 1 — the pinned
+      // attr-table contract); tiers apply only when the attr is unset.
+      const attrLineHeight = parseLineHeight(node.attrs?.lineHeight, resolved.fontSize);
+      const tierLineHeight = charDef?.properties.lineHeight ?? paraDef?.properties.lineHeight;
+      const lineHeight = attrLineHeight !== undefined ? attrLineHeight : tierLineHeight;
 
       // Dropped-attr detection — collected, warned once, never silent.
       // color/highlight/underline/strike and left/center/right textAlign
@@ -490,27 +535,32 @@ function convertNode(
       if (child.marks.some((m) => m.type.name === 'link')) dropped.add('link');
 
       const highlightMark = child.marks.find((m) => m.type.name === 'highlight');
-      runs.push({ text: child.text, style });
+
+      // TRANSFORMED MEASUREMENT (amendment 3): run TEXT is transformed
+      // HERE, so the engine measures (and wraps) the transformed text
+      // — uppercase is wider than source in real fonts. PM keeps the
+      // source text; the length-preserving invariant (transformText
+      // throws otherwise) keeps engine offsets identity-mapped to PM
+      // offsets, so caret/hitTest/search all stay in source coords.
+      const runText = transformText(child.text, resolved.textTransform);
+      runs.push({ text: runText, style: textStyleOf(resolved, lineHeight) });
       runDecor.push({
-        color:
-          typeof textStyleMark?.attrs?.color === 'string' && textStyleMark.attrs.color
-            ? textStyleMark.attrs.color
-            : undefined,
+        color: resolved.color !== '#000000' ? resolved.color : undefined,
         highlight: highlightMark
           ? ((highlightMark.attrs?.color as string | undefined) ?? DEFAULT_HIGHLIGHT)
           : undefined,
-        underline: child.marks.some((m) => m.type.name === 'underline'),
-        strike: child.marks.some((m) => m.type.name === 'strike'),
+        underline: resolved.underline,
+        strike: resolved.strike,
       });
-      text += child.text;
+      text += runText;
     });
   }
 
   // EMPTY-TEXTBLOCK INHERITANCE (P1): an empty paragraph/heading emits
   // ONE zero-length run with the block's effective style — same
-  // parsing as normal runs minus the marks (none exist on an empty
+  // resolution as normal runs minus the marks (none exist on an empty
   // textblock). The engine measures present-run styles over baseStyle
-  // (P1 ruling), so an empty paragraph in a 2.0-spaced doc measures
+  // (P1 ruling), so an empty paragraph in a 2.0-spaced style measures
   // 2.0 and its NPC ¶ paints at the right size. The horizontalRule
   // atom (kind 'paragraph' by projection) is excluded — it carries no
   // text style and keeps the baseStyle-measured placeholder line.
@@ -518,32 +568,47 @@ function convertNode(
     runs.length === 0 &&
     (node.type.name === 'paragraph' || node.type.name === 'heading')
   ) {
-    const fontSize = headingDefault?.fontSize ?? baseStyle.fontSize;
-    runs.push({
-      text: '',
-      style: {
-        fontFamily: baseStyle.fontFamily,
-        fontSize,
-        lineHeight: parseLineHeight(node.attrs?.lineHeight, fontSize),
-      },
-    });
+    const resolved = resolveRun({ base, para: paraDef });
+    const attrLineHeight = parseLineHeight(node.attrs?.lineHeight, resolved.fontSize);
+    const tierLineHeight = paraDef?.properties.lineHeight;
+    const lineHeight = attrLineHeight !== undefined ? attrLineHeight : tierLineHeight;
+    // No bold/italic keys on the empty-textblock style (the pinned
+    // P1 projection shape) — the glyph is the ¶ placeholder.
+    runs.push({ text: '', style: textStyleOf(resolved, lineHeight, false) });
   }
 
-  // Block-tier spacing (M6): engine px, same unit the PM schema
-  // stores. Applied once at block entry / block exit by the walk —
-  // never re-applied on fragment continuations.
-  const spaceBefore = parseSpacing(node.attrs?.spaceBefore);
-  const spaceAfter = parseSpacing(node.attrs?.spaceAfter);
+  // BLOCK TIER (M6 + M-STYLES): direct attrs beat the paragraph style's
+  // geometry properties, which beat the baseline. Unset = default attr
+  // value (0 / null), so the STYLE provides the value in that case; the
+  // legacy `indent` steps fold into the attr side as today.
+  const attrsTier: BlockTierAttrs =
+    kind === 'paragraph'
+      ? {
+          spaceBefore: node.attrs?.spaceBefore || undefined,
+          spaceAfter: node.attrs?.spaceAfter || undefined,
+          indentLeft: ownIndentLeft(node) || undefined,
+          indentRight: ownIndentRight(node) || undefined,
+          firstLineIndent: node.attrs?.firstLineIndent,
+          textAlign: alignAttr,
+        }
+      : { textAlign: alignAttr };
+  const tier = resolveBlockTier(paraDef, attrsTier, projection.indentLeft);
 
-  // INDENT FAMILY (M6.2): own attrs (validated + clamped, see the
-  // module receipts) on top of the projection's BASE indent (list
-  // depth gutter, blockquote gutter, 0 for plain blocks). totalLeft
-  // is what the engine sees as indentLeft — also the first-line clamp
-  // reference (the exact sum the engine would throw on).
-  const ownLeft = kind === 'paragraph' ? ownIndentLeft(node) : 0;
-  const totalLeft = projection.indentLeft + ownLeft;
-  const indentRight = kind === 'paragraph' ? ownIndentRight(node) : 0;
-  const firstLineIndent = kind === 'paragraph' ? ownFirstLineIndent(node, totalLeft) : undefined;
+  // Validation before the engine can throw (negative left edge), plus
+  // the style tier's own values — same clamps, same one-time warnings.
+  const totalLeft = tier.indentLeft < 0 ? (warnIndentClamp(`style indentLeft < 0 → 0`), 0) : tier.indentLeft;
+  const indentRight = tier.indentRight < 0 ? (warnIndentClamp(`style indentRight < 0 → 0`), 0) : tier.indentRight;
+  let firstLineIndent = tier.firstLineIndent;
+  if (firstLineIndent != null && totalLeft + firstLineIndent < 0) {
+    warnIndentClamp(
+      `firstLineIndent ${firstLineIndent} under indentLeft ${totalLeft} → ${-totalLeft} (first line left edge floored at 0)`
+    );
+    firstLineIndent = totalLeft > 0 ? -totalLeft : undefined;
+  }
+
+  const align = tier.align;
+  const spaceBefore = tier.spaceBefore != null && tier.spaceBefore > 0 ? tier.spaceBefore : undefined;
+  const spaceAfter = tier.spaceAfter != null && tier.spaceAfter > 0 ? tier.spaceAfter : undefined;
 
   const hints = projection.paint ?? {};
   // SEMANTIC-side hint spelling (M6.1): listMarker per the projection
@@ -597,12 +662,26 @@ function convertNode(
   };
 }
 
-export function pmDocToSemantic(pm: PMNode, baseStyle: TextStyle): AdapterResult {
-  const styleKey = `${baseStyle.fontFamily}\u0000${baseStyle.fontSize}`;
-  if (styleKey !== lastStyleKey) {
+export function pmDocToSemantic(
+  pm: PMNode,
+  baseStyle: TextStyle,
+  registry: StyleRegistrySnapshot = BUILTIN_REGISTRY
+): AdapterResult {
+  // THE REGISTRY EPOCH (M-STYLES STEP 3): the shell-side mirror of the
+  // engine's baseStyleHash. A baseStyle change OR any definition edit
+  // (epoch bump) invalidates the identity cache wholesale — every
+  // block re-converts with fresh resolved runs/decor. The engine then
+  // decides per block what re-breaks via contentHash (layout-relevant
+  // edits) or splices (paint-only edits — those still reach the canvas
+  // through the rebuilt AdapterBlocks).
+  const contextKey = `${baseStyle.fontFamily}\u0000${baseStyle.fontSize}\u0000${registry.epoch}`;
+  if (contextKey !== lastContextKey) {
     cacheGeneration += 1;
-    lastStyleKey = styleKey;
+    lastContextKey = contextKey;
   }
+
+  const base = baselineRunStyle(baseStyle);
+  const definitions = registry.definitions;
 
   const blocks: AdapterBlock[] = [];
   const semantic: Block[] = [];
@@ -635,7 +714,7 @@ export function pmDocToSemantic(pm: PMNode, baseStyle: TextStyle): AdapterResult
           'BlockIdExtension must mint ids on creation/load/paste before any layout call'
       );
     }
-    const conv = convertNode(node, projection, blockId, baseStyle, dropped);
+    const conv = convertNode(node, projection, blockId, base, definitions, dropped);
     nodeCache.set(node, conv);
     return conv;
   };

@@ -18,6 +18,11 @@ import { IconButton } from "../../../IconButton";
 import { useDocumentStore } from "@/lib/document/store";
 import { FontSizeInput } from "../FontSizeInput";
 import { useConfigStore } from "@/lib/config/store";
+import { useStyleRegistryStore } from "@/lib/styles/registry";
+import {
+  effectiveSelectionRunStyle,
+  selectionBaseline,
+} from "@/lib/styles/selection";
 import { ColorPickerButton } from "../../ColorPickerButton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -34,24 +39,38 @@ export function FontGroup() {
   const editor = useDocumentStore((s) => s.editor);
 
   const defaultFontSize = useConfigStore((s) => s.config.editor.defaultFontSize);
+  const defaultFontFamily = useConfigStore((s) => s.config.editor.defaultFontFamily);
+  const mergedStyles = useStyleRegistryStore((s) => s.merged);
 
   const attrs = useEditorState({
     editor,
     selector: (ctx) => ({
-      fontFamily: ctx.editor?.getAttributes("textStyle").fontFamily ?? "",
-      fontSize:
-        (
-          ctx.editor?.getAttributes("textStyle").fontSize as string | undefined
-        )?.replace("px", "") ?? "",
       color: ctx.editor?.getAttributes("textStyle").color ?? "#000000",
       isBold: ctx.editor?.isActive("bold") ?? false,
       isItalic: ctx.editor?.isActive("italic") ?? false,
       isUnderline: ctx.editor?.isActive("underline") ?? false,
       isStrike: ctx.editor?.isActive("strike") ?? false,
+      // M-STYLES addendum 1: the Font/size controls display the
+      // EFFECTIVE values from the cascade — one resolveRun call, never
+      // parallel UI state. Fixes the blank-dropdown default (a caret
+      // in a heading shows the heading's resolved size).
+      effectiveFontFamily:
+        ctx.editor
+          ? effectiveSelectionRunStyle(
+              ctx.editor,
+              selectionBaseline(ctx.editor, defaultFontFamily, defaultFontSize),
+              mergedStyles,
+            ).fontFamily
+          : "",
+      effectiveFontSize: ctx.editor
+        ? effectiveSelectionRunStyle(
+            ctx.editor,
+            selectionBaseline(ctx.editor, defaultFontFamily, defaultFontSize),
+            mergedStyles,
+          ).fontSize
+        : 0,
     }),
   });
-
-  const displayFontSize = attrs?.fontSize || String(defaultFontSize);
 
   if (!editor) return null;
 
@@ -61,8 +80,8 @@ export function FontGroup() {
         <TooltipTrigger
           render={
             <Select
-              value={attrs?.fontFamily || ''}
-              onValueChange={(value) => editor.chain().focus().setFontFamily(value).run()}
+              value={attrs?.effectiveFontFamily || ''}
+              onValueChange={(value) => value && editor.chain().focus().setFontFamily(value).run()}
             >
               <Tooltip>
                 <TooltipTrigger
@@ -89,7 +108,7 @@ export function FontGroup() {
         <TooltipContent>Font Family</TooltipContent>
       </Tooltip>
 
-      <FontSizeInput editor={editor} currentSize={displayFontSize} />
+      <FontSizeInput editor={editor} currentSize={String(attrs?.effectiveFontSize || defaultFontSize)} />
 
       <ColorPickerButton
         label="Text Color"

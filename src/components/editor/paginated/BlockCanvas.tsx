@@ -24,6 +24,17 @@ interface BlockCanvasProps {
   /** Marker font: the block's first run style, else the document
    * default ("style from the block's runs"). */
   markerStyle?: TextStyle;
+  /**
+   * REGISTRY EPOCH (M-STYLES amendment 1): the repaint key's third
+   * leg. A RunDecor-level property edit (a style's COLOR) changes no
+   * layout-relevant fact — the engine splices (blocksWalked = 0) and
+   * hands back the SAME frozen LineBox references, so the line
+   * identity test below would skip the repaint and the new color
+   * would stay invisible behind the dirty-skip. The epoch forces the
+   * repaint: any definition edit repaints every block once, and the
+   * epoch comes from the same store subscription PaginatedView uses.
+   */
+  styleEpoch: number;
 }
 
 /**
@@ -41,7 +52,7 @@ interface BlockCanvasProps {
  * their pixels. Falls back to full repaint on canvas resize, first-line
  * edits, or style changes (the fallback cost = the old behavior).
  */
-export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metrics, left, top, width, align, runDecor, npc, paint, markerStyle }: BlockCanvasProps) {
+export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metrics, left, top, width, align, runDecor, npc, paint, markerStyle, styleEpoch }: BlockCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const prevLinesRef = useRef<readonly LineBox[] | null>(null);
   const prevTextRef = useRef('');
@@ -57,7 +68,11 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
 
     const decorKey = runDecor.map((d) => `${d.color}|${d.highlight}|${d.underline}|${d.strike}`).join(';');
     const paintKey = paint ? JSON.stringify(paint) : '';
-    const boxKey = `${left}|${top}|${width}|${align}|${decorKey}|${npc === true ? 'npc' : ''}|${paintKey}`;
+    const boxKey = `${left}|${top}|${width}|${align}|${decorKey}|${npc === true ? 'npc' : ''}|${paintKey}|ep${styleEpoch}`;
+    // boxKey carries the registry epoch: ANY definition edit breaks
+    // the boxKey comparison and forces the repaint below — even when
+    // the engine spliced (same LineBox references, blocksWalked = 0)
+    // and only paint-tier facts (decor color) changed.
     const unchanged =
       prevBoxRef.current === boxKey &&
       prevTextRef.current === text &&
@@ -121,7 +136,7 @@ export const BlockCanvas = memo(function BlockCanvas({ lines, runs, text, metric
     prevLinesRef.current = lines;
     prevTextRef.current = text;
     prevBoxRef.current = boxKey;
-  }, [lines, runs, text, metrics, left, top, width, height, first.rect.y, align, runDecor, npc, paint, markerStyle]);
+  }, [lines, runs, text, metrics, left, top, width, height, first.rect.y, align, runDecor, npc, paint, markerStyle, styleEpoch]);
 
   return (
     <canvas
