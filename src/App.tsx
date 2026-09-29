@@ -13,6 +13,7 @@ import './index.css';
 import { useAppShortcuts } from './lib/shortcuts/useAppShortcuts';
 import { useAutosave } from './lib/document/useAutosave';
 import { useMenuEvents } from './lib/menu/useMenuEvents';
+import { useStyleRegistryStore } from './lib/styles/registry';
 import { StatusBar } from './components/layout/StatusBar';
 import { Ribbon } from './components/layout/Ribbon';
 import { SidebarHost } from './lib/layout/sidebar/SidebarHost';
@@ -23,6 +24,12 @@ function App() {
   useAutosave();
   useMenuEvents();
   useAppShortcuts();
+  // M-STYLES: load the global registry (appConfigDir/styles.json) once
+  // at bootstrap — merges over the code builtins; first run seeds the
+  // file (hyperlink custom, builtins.ts). Doc layers apply on open.
+  useEffect(() => {
+    void useStyleRegistryStore.getState().loadGlobal();
+  }, []);
 
   // Differential benchmark. Triggers: URL #bench/?bench, OR five
   // rapid clicks on the StatusBar (mouse-only driving — the test box's

@@ -129,6 +129,27 @@ const spacingAttributes = {
   },
 };
 
+/**
+ * M-STYLES: the paragraph's STYLE IDENTITY — a reference into the
+ * style registry, never a bundle of stamped attrs. Non-optional
+ * INVARIANT: every paragraph carries a styleId; old documents get it
+ * via the attr default ('normal') on load — no migration pass. The
+ * pageless render path consumes the class (wp-style-{id}) through the
+ * registry-generated stylesheet; direct attrs (inline styles from the
+ * attribute renderers above) beat the class by CSS construction,
+ * which is the pageless spelling of the cascade (direct > style).
+ */
+const styleIdAttribute = (fallback: string) => ({
+  styleId: {
+    default: fallback,
+    parseHTML: (element: HTMLElement) => element.getAttribute('data-style-id') ?? undefined,
+    renderHTML: (attributes: { styleId?: string }) => ({
+      'data-style-id': attributes.styleId,
+      class: `wp-style-${attributes.styleId}`,
+    }),
+  },
+});
+
 export const ParagraphWithExtras = Paragraph.extend({
   addAttributes() {
     return {
@@ -138,15 +159,22 @@ export const ParagraphWithExtras = Paragraph.extend({
       ...directionalIndentAttributes,
       ...firstLineIndentAttribute,
       ...spacingAttributes,
+      ...styleIdAttribute('normal'),
     };
   },
 });
 
+/** The heading tier carries `heading-{level}` as its style identity
+ * (attr default per the M-STYLES ruling; HeadingSync maintains the
+ * alignment reactively). The adapter resolves headings through
+ * `heading-{level}` — the attr's guaranteed twin — so a pre-sync node
+ * can never render under the wrong tier. */
 export const HeadingWithExtras = Heading.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
       ...lineHeightAttribute,
+      ...styleIdAttribute('heading-1'),
     };
   },
 });
@@ -213,14 +241,50 @@ export const ParagraphExtraCommands = Extension.create({
 
       clearFormatting:
         () =>
-        ({ editor }: { editor: any }) => {
-          editor
-            .chain()
-            .focus()
-            .unsetAllMarks()
-            .updateAttributes('paragraph', { lineHeight: null, indent: 0, textAlign: null })
-            .updateAttributes('heading', { lineHeight: null, textAlign: null })
-            .run();
+        ({ editor, tr, state, dispatch }: { editor: any; tr: any; state: any; dispatch: any }) => {
+          // Word semantics: Clear Formatting resets the STYLE, not
+          // just the direct props — headings convert to paragraphs
+          // under styleId 'normal' (M-STYLES; the dropdown's apply
+          // path shares the rule).
+          //
+          // Direct tr manipulation, NOT a nested editor.chain(): a
+          // nested chain dispatches a second transaction while this
+          // command's tr is pending ("applying a mismatched
+          // transaction"), and the node-type conversion below makes
+          // that combination throw — pinned by the styles-model suite.
+          const { empty, ranges } = tr.selection;
+          if (!empty) {
+            const clearable = Object.values(editor.schema.marks).filter(
+              (markType: any) => !editor.extensionManager.nonClearableMarks.includes(markType.name)
+            );
+            for (const range of ranges) {
+              for (const markType of clearable) {
+                tr.removeMark(range.$from.pos, range.$to.pos, markType);
+              }
+            }
+          }
+          const { $from, $to } = tr.selection;
+          const targets: Array<{ pos: number; node: any }> = [];
+          state.doc.forEach((node: any, offset: number) => {
+            const name = node.type.name;
+            if (name !== 'paragraph' && name !== 'heading') return;
+            if (offset >= $to.pos || offset + node.nodeSize <= $from.pos) return;
+            targets.push({ pos: offset, node });
+          });
+          for (const { pos, node } of targets) {
+            tr.setNodeMarkup(
+              pos,
+              node.type.name === 'heading' ? state.schema.nodes.paragraph : undefined,
+              {
+                ...node.attrs,
+                lineHeight: null,
+                indent: 0,
+                textAlign: null,
+                styleId: 'normal',
+              }
+            );
+          }
+          if (dispatch) dispatch(tr);
           return true;
         },
     };

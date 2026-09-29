@@ -131,7 +131,7 @@ export function SettingsDialog() {
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <FolderOpen className="h-4 w-4" />
-                  Configuration File
+                  Configuration Files
                 </button>
                 {revealError && <div className="px-2 pt-1 text-xs text-destructive">{revealError}</div>}
               </div>

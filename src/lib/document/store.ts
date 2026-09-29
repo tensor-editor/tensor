@@ -4,6 +4,7 @@ import { message } from '@tauri-apps/plugin-dialog';
 import { saveDocument, saveDocumentAs, openDocument } from './fileOperations';
 import { clearRecoveryCopy } from './recovery';
 import { useConfigStore } from '../config/store';
+import { useStyleRegistryStore } from '../styles/registry';
 import type { PageSetup } from './pageSetup';
 
 function defaultPageSetup(): PageSetup {
@@ -74,6 +75,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const result = await openDocument(editor);
       if (result) {
+        // M-STYLES: the opened file's doc layer replaces whatever the
+        // previous document carried (doc overrides global by id at
+        // merge; the epoch bump relayouts both modes).
+        useStyleRegistryStore.getState().applyDocLayer(result.styleDefinitions);
         set({
           filePath: result.path,
           isDirty: false,

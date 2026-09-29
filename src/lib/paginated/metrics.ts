@@ -21,9 +21,56 @@ import type { TextMetrics, TextStyle } from '@tensor-editor/engine';
 
 /** THE one font-string builder — RealMetrics measures with it and the
  * track painter sets ctx.font from it, so measured widths and painted
- * advances can never diverge. Style/weight/size/family, full TextStyle. */
+ * advances can never diverge. Style/weight/size/family, full TextStyle.
+ * fontVariant is deliberately NOT in the string: it is a separate
+ * canvas property (fontVariantCaps) applied by applyVariantCaps, and
+ * it participates in every measurement cache key — small-cap glyphs
+ * measure narrower than full caps, so a variant edit must re-measure. */
 export function fontString(style: TextStyle): string {
   return `${style.italic ? 'italic ' : ''}${style.bold ? '700 ' : ''}${style.fontSize}px ${style.fontFamily}`;
+}
+
+/**
+ * SMALL-CAPS (M-STYLES addendum 3), paint-level. RECEIPT: the canvas
+ * 2D context's `fontVariantCaps` property (HTML spec: "the font-caps
+ * to apply") — Chromium and Gecko support it; WebKit support exists in
+ * modern WebKit (Safari 17+/WebKitGTK 2.4x-era builds) but OLDER
+ * WebKitGTK (the Tauri Linux webview on distros shipping older
+ * webkit2gtk) does NOT implement it, silently ignoring the assignment.
+ * FALLBACK: feature-detected once per context — if the assignment does
+ * not read back, we paint full-case glyphs (graceful: layout and paint
+ * both used the same measured widths, so nothing misaligns) and warn
+ * ONCE in dev. The alternative (faking small-caps by substituting
+ * downcased smaller caps) is banned: it would change glyph advances
+ * without a measurement story.
+ */
+let variantCapsSupport: boolean | null = null;
+let warnedNoVariantCaps = false;
+
+export function applyVariantCaps(ctx: CanvasRenderingContext2D, style: TextStyle): void {
+  if (style.fontVariant !== 'small-caps') {
+    ctx.fontVariantCaps = 'normal';
+    return;
+  }
+  if (variantCapsSupport === null) {
+    try {
+      ctx.fontVariantCaps = 'small-caps';
+      variantCapsSupport = ctx.fontVariantCaps === 'small-caps';
+    } catch {
+      variantCapsSupport = false;
+    }
+  }
+  if (variantCapsSupport) {
+    ctx.fontVariantCaps = 'small-caps';
+  } else if (!warnedNoVariantCaps) {
+    warnedNoVariantCaps = true;
+    if (import.meta.env.DEV) {
+      console.warn(
+        '[metrics] canvas fontVariantCaps unsupported in this webview (WebKitGTK builds may lack it) — ' +
+          'small-caps text paints with full-case glyphs; layout/paint stay consistent (same widths)'
+      );
+    }
+  }
 }
 
 let singleton: TextMetrics | null = null;
@@ -47,10 +94,12 @@ function createRealMetrics(): TextMetrics {
   const WIDTH_CACHE_MAX = 20_000;
 
   function vertical(style: TextStyle): { ascent: number; descent: number } {
-    const key = fontString(style);
+    const font = fontString(style);
+    const key = `${font}\u0000${style.fontVariant ?? ''}`;
     let cached = verticalCache.get(key);
     if (!cached) {
-      ctx.font = key;
+      ctx.font = font;
+      applyVariantCaps(ctx, style);
       // P1 RECEIPT + RULING: the pre-P1 code measured
       // actualBoundingBoxAscent/Descent of 'Hg' — the INK extent of two
       // specific glyphs (cap-height to the g's descender, typically
@@ -81,10 +130,12 @@ function createRealMetrics(): TextMetrics {
 
   return {
     measure(text, style) {
-      const key = `${fontString(style)}\u0000${text}`;
+      const font = fontString(style);
+      const key = `${font}\u0000${style.fontVariant ?? ''}\u0000${text}`;
       const hit = widthCache.get(key);
       if (hit !== undefined) return hit;
-      ctx.font = fontString(style);
+      ctx.font = font;
+      applyVariantCaps(ctx, style);
       const width = ctx.measureText(text).width;
       if (widthCache.size >= WIDTH_CACHE_MAX) widthCache.clear();
       widthCache.set(key, width);

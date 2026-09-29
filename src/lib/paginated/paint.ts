@@ -1,6 +1,6 @@
 import type { LayoutResult, LineBox, Run, TextMetrics, TextStyle } from '@tensor-editor/engine';
 import type { BlockPaint, RunDecor, TextAlign } from './adapter';
-import { fontString } from './metrics';
+import { applyVariantCaps, fontString } from './metrics';
 import { alignOffset } from './positionMap';
 
 /**
@@ -178,6 +178,10 @@ export function paintLines(
 
       ctx.fillStyle = decor.color ?? DEFAULT_TEXT_COLOR;
       ctx.font = fontString(run.style);
+      // SMALL-CAPS (M-STYLES): the same applyVariantCaps the metrics
+      // singleton used to MEASURE this run — painted advances can
+      // never diverge from measured widths (the one-ruler rule).
+      applyVariantCaps(ctx, run.style);
       ctx.fillText(npc ? npcSubstitute(segmentText) : segmentText, x, baselineY);
 
       // TODO(typographic polish): proper underline/strike metrics per

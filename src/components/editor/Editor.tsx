@@ -1,12 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useEditor } from "@tiptap/react";
 import type { TextMetrics } from "@tensor-editor/engine";
 import { useDocumentStore } from "../../lib/document/store";
 import { useConfigStore } from "../../lib/config/store";
+import { useStyleRegistryStore } from "@/lib/styles/registry";
+import { resolveNormalBase } from "@/lib/styles/resolve";
 import { tensorExtensions } from "@/lib/editor/tensorExtensions";
 import { ensureBlockIds } from "@/lib/editor/BlockIdExtension";
+import { ensureStyleSync } from "@/lib/styles/styleExtensions";
 import { PaginatedView } from "./PaginatedView";
 import { PagelessEditor } from "./PagelessEditor";
+import { StylesStylesheet } from "@/lib/styles/StylesStylesheet";
 
 export function Editor({ metrics }: { metrics?: TextMetrics }) {
   const setEditor = useDocumentStore((s) => s.setEditor);
@@ -19,6 +23,14 @@ export function Editor({ metrics }: { metrics?: TextMetrics }) {
     (s) => s.config.editor.defaultFontSize,
   );
   const mode = useConfigStore((s) => s.config.editor.defaultPageLayout);
+  // baseStyle := resolve('normal') (amendment 6): the pageless
+  // container font is the resolved 'normal' style — config defaults
+  // when 'normal' is unedited, the registry override when it is not.
+  const mergedStyles = useStyleRegistryStore((s) => s.merged);
+  const normalBase = useMemo(
+    () => resolveNormalBase(defaultFontFamily, defaultFontSize, mergedStyles),
+    [defaultFontFamily, defaultFontSize, mergedStyles]
+  );
 
   const editor = useEditor({
     extensions: tensorExtensions(),
@@ -26,8 +38,12 @@ export function Editor({ metrics }: { metrics?: TextMetrics }) {
     // The INITIAL content is created without a transaction, so the
     // BlockIdExtension's appendTransaction never fires for it — run the
     // mint pass explicitly or the first layout call throws on the
-    // id-less doc (adapter contract) and boots into the fallback.
-    onCreate: ({ editor }) => ensureBlockIds(editor),
+    // id-less doc (adapter contract) and boots into the fallback. The
+    // style-sync pass is the same load-path twin for heading styleIds.
+    onCreate: ({ editor }) => {
+      ensureBlockIds(editor);
+      ensureStyleSync(editor);
+    },
     onUpdate: () => markDirty(),
     editorProps: {
       handleClick: (_view, _pos, event) => {
@@ -103,14 +119,22 @@ export function Editor({ metrics }: { metrics?: TextMetrics }) {
 
   // Mode routing seam: 'Pages' is Tensor's default and identity —
   // it renders the engine-driven PaginatedView; everything else renders
-  // the pageless interim shell. New modes are new branches here.
-  return mode === 'Pages' ? (
-    <PaginatedView editor={editor} metrics={metrics} />
-  ) : (
-    <PagelessEditor
-      editor={editor}
-      fontFamily={defaultFontFamily}
-      fontSize={defaultFontSize}
-    />
+  // the pageless interim shell. New modes are new branches here. The
+  // registry stylesheet mounts for BOTH modes (the paginated fallback
+  // renders EditorContent too) — one source of truth for pageless
+  // styling.
+  return (
+    <>
+      <StylesStylesheet />
+      {mode === 'Pages' ? (
+        <PaginatedView editor={editor} metrics={metrics} />
+      ) : (
+        <PagelessEditor
+          editor={editor}
+          fontFamily={normalBase.fontFamily}
+          fontSize={normalBase.fontSize}
+        />
+      )}
+    </>
   );
 }
