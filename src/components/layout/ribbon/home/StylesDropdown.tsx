@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Pencil, Plus } from 'lucide-react';
 import { useEditorState } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Editor } from '@tiptap/core';
 import { useStyleRegistryStore } from '@/lib/styles/registry';
-import { headingStyleId, isBuiltinId, type StyleDefinition } from '@/lib/styles/types';
+import { headingStyleId, type StyleDefinition } from '@/lib/styles/types';
 import { inlineStyle } from '@/lib/styles/resolve';
 import { StyleDialog, type StyleDialogState } from '@/components/dialogs/StyleDialog';
 
@@ -112,48 +112,40 @@ export function StylesDropdown({ editor }: { editor: Editor }) {
           >
             <Pencil size={12} />
           </button>
-          {!isBuiltinId(def.id) && (
-            <button
-              className="rounded p-1 hover:bg-muted"
-              title="Delete style (its paragraphs fall back to default rendering)"
-              onClick={() => {
-                try {
-                  useStyleRegistryStore.getState().deleteDefinition(def.id);
-                } catch (err) {
-                  // Loud per STEP 2: a failed delete surfaces, never
-                  // vanishes.
-                  console.error(err);
-                }
-                setOpen(false);
-              }}
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
         </div>
       </div>
     );
   };
+
+  // The trigger NAMES the current style (Word's spelling of the same
+  // affordance) — the caret block's paragraph style, truncated when a
+  // custom name runs long.
+  const currentStyleName = active?.paragraph ? (merged[active.paragraph]?.name ?? active.paragraph) : 'Styles';
 
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-sm">
-              Styles
-              <ChevronDown size={12} />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-36 justify-between gap-2 px-2 text-sm font-normal"
+              aria-label={`Styles (current: ${currentStyleName})`}
+            >
+              <span className="truncate">{currentStyleName}</span>
+              <ChevronDown size={12} className="shrink-0 opacity-60" />
             </Button>
           }
         />
-        <PopoverContent className="w-56 p-1">
-          <div className="max-h-80 overflow-y-auto">
+        <PopoverContent className="w-64 p-1">
+          <div className="max-h-[28rem] overflow-y-auto">
             <div className="px-2 pt-1 pb-0.5 text-xs font-medium text-muted-foreground">
               Paragraph Styles
             </div>
             {paragraphStyles.map((def) => row(def, false))}
             <div className="px-2 pt-2 pb-0.5 text-xs font-medium text-muted-foreground">
-              Character Styles
+              Text Styles
             </div>
             {characterStyles.map((def) => row(def, true))}
           </div>

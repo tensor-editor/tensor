@@ -105,6 +105,24 @@ describe('resolveRun cascade (per property)', () => {
     expect(r.fontVariant).toBe('normal');
     expect(r.textTransform).toBe('lowercase');
   });
+
+  it('highlight cascades like color (paint tier): char beats para, direct mark beats all', () => {
+    expect(BASE.highlight).toBe(''); // '' = none, the complete baseline
+    const r1 = resolveRun({ base: BASE, para: def({ highlight: '#fef08a' }) });
+    expect(r1.highlight).toBe('#fef08a');
+    const r2 = resolveRun({
+      base: BASE,
+      para: def({ highlight: '#fef08a' }),
+      char: def({ highlight: '#ffcccc' }, 'character'),
+    });
+    expect(r2.highlight).toBe('#ffcccc');
+    const r3 = resolveRun({
+      base: BASE,
+      char: def({ highlight: '#ffcccc' }, 'character'),
+      direct: { highlight: '#ccffcc' },
+    });
+    expect(r3.highlight).toBe('#ccffcc');
+  });
 });
 
 describe('resolveBlockTier', () => {
@@ -209,5 +227,17 @@ describe('CSS serialization (one mapper, both consumers)', () => {
     expect(cssDeclarations({ underline: true, strike: true })).toContain(
       'text-decoration: underline line-through'
     );
+  });
+
+  it('highlight renders as background-color (the pageless spelling of the paint tier)', () => {
+    expect(cssDeclarations({ highlight: '#fef08a' })).toContain('background-color: #fef08a');
+  });
+
+  it("'justify' passes through the block tier (pageless renders it; the adapter's loud ruling)", () => {
+    const tier = resolveBlockTier(def({ textAlign: 'justify' }), {});
+    expect(tier.align).toBe('justify');
+    // Attr beats the style tier, per the usual precedence.
+    const tier2 = resolveBlockTier(def({ textAlign: 'justify' }), { textAlign: 'center' });
+    expect(tier2.align).toBe('center');
   });
 });

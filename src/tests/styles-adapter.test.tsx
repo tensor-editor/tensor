@@ -179,6 +179,32 @@ describe('the registry epoch invalidates the adapter identity cache', () => {
     expect(a1.blocks[0]!.runs[0]!.style.fontSize).toBe(14);
   });
 
+  it("style-provided 'justify' is LOUD in paginated: align left + the one-time dropped warning", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const justified: StyleDefinition = {
+        id: 'justified',
+        name: 'Justified',
+        kind: 'paragraph',
+        properties: { textAlign: 'justify' },
+      };
+      const { editor } = renderTensor('<p>Some text</p>');
+      await settleLayout();
+      act(() => {
+        editor.commands.setTextSelection(2);
+        editor.commands.applyParagraphStyle('justified');
+      });
+      const adapted = pmDocToSemantic(editor.state.doc, BASE, snapshot([justified]));
+      expect(adapted.blocks[0]!.align).toBe('left');
+      // The dropped-attr warning fired — justify is engine work, the
+      // same loud ruling the textAlign attr always had (pageless
+      // renders it natively through the stylesheet).
+      expect(warn.mock.calls.some((c) => JSON.stringify(c).includes('justify'))).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('a heading resolves through heading-{level} (the sync twin), not the raw attr', async () => {
     const { editor } = renderTensor('<h2>Head two</h2>');
     await settleLayout();

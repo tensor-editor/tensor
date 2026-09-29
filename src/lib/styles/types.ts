@@ -39,13 +39,22 @@ export const StylePropertiesSchema = z.object({
   underline: z.boolean().optional(),
   strike: z.boolean().optional(),
   color: z.string().optional(),
+  /** Highlight background (the same mark the ribbon's Highlighter
+   * button sets). */
+  highlight: z.string().optional(),
   lineHeight: z.number().positive().optional(),
   spaceBefore: z.number().optional(),
   spaceAfter: z.number().optional(),
   indentLeft: z.number().optional(),
   indentRight: z.number().optional(),
   firstLineIndent: z.number().optional(),
-  textAlign: z.enum(['left', 'center', 'right']).optional(),
+  /**
+   * 'justify' shares the adapter's existing loud ruling: pageless
+   * renders it natively; paginated treats it as left + the
+   * dropped-attr warning (justify is engine work, stays loud — the
+   * same semantics the textAlign ATTR already has).
+   */
+  textAlign: z.enum(['left', 'center', 'right', 'justify']).optional(),
   fontVariant: z.enum(['small-caps', 'normal']).optional(),
   textTransform: z.enum(['uppercase', 'lowercase', 'capitalize', 'title-case', 'none']).optional(),
 });

@@ -50,6 +50,12 @@ export function effectiveSelectionRunStyle(
   if (editor.isActive('underline')) direct.underline = true;
   if (editor.isActive('strike')) direct.strike = true;
   if (typeof textStyle.color === 'string' && textStyle.color) direct.color = textStyle.color;
+  const highlightAttrs = editor.getAttributes('highlight');
+  if (typeof highlightAttrs.color === 'string' && highlightAttrs.color) {
+    direct.highlight = highlightAttrs.color;
+  } else if (editor.isActive('highlight')) {
+    direct.highlight = '#fef08a'; // the adapter's DEFAULT_HIGHLIGHT
+  }
 
   return resolveRun({ base, para: paraDef, char: charDef, direct });
 }

@@ -497,6 +497,8 @@ function convertNode(
           ? lookupStyle(charStyleMark.attrs.styleId, definitions)
           : null;
 
+      const highlightMark = child.marks.find((m) => m.type.name === 'highlight');
+
       // DIRECT MARKS (strongest tier).
       const direct = {
         ...(familyAttr ? { fontFamily: familyAttr } : {}),
@@ -507,6 +509,9 @@ function convertNode(
         ...(child.marks.some((m) => m.type.name === 'strike') ? { strike: true } : {}),
         ...(typeof textStyleMark?.attrs?.color === 'string' && textStyleMark.attrs.color
           ? { color: textStyleMark.attrs.color }
+          : {}),
+        ...(highlightMark
+          ? { highlight: ((highlightMark.attrs?.color as string | undefined) ?? DEFAULT_HIGHLIGHT) }
           : {}),
       };
 
@@ -531,10 +536,7 @@ function convertNode(
       // FAMILY is mapped to engine geometry (M6.2 — indent/indentLeft/
       // indentRight consumed, no longer dropped); justify remains
       // engine work and stays loud.
-      if (alignAttr === 'justify') dropped.add('textAlign (justify — engine work)');
       if (child.marks.some((m) => m.type.name === 'link')) dropped.add('link');
-
-      const highlightMark = child.marks.find((m) => m.type.name === 'highlight');
 
       // TRANSFORMED MEASUREMENT (amendment 3): run TEXT is transformed
       // HERE, so the engine measures (and wraps) the transformed text
@@ -546,9 +548,9 @@ function convertNode(
       runs.push({ text: runText, style: textStyleOf(resolved, lineHeight) });
       runDecor.push({
         color: resolved.color !== '#000000' ? resolved.color : undefined,
-        highlight: highlightMark
-          ? ((highlightMark.attrs?.color as string | undefined) ?? DEFAULT_HIGHLIGHT)
-          : undefined,
+        // The HIGHLIGHT tier cascades like color (direct mark > char
+        // style > paragraph style; '' baseline = no highlight).
+        highlight: resolved.highlight !== '' ? resolved.highlight : undefined,
         underline: resolved.underline,
         strike: resolved.strike,
       });
@@ -606,7 +608,12 @@ function convertNode(
     firstLineIndent = totalLeft > 0 ? -totalLeft : undefined;
   }
 
-  const align = tier.align;
+  // 'justify' (attr OR style tier) is engine work and stays LOUD: the
+  // pageless CSS renders it natively, the paginated mode drops it to
+  // left through the same one-time warning the textAlign attr always
+  // had — identical ruling for the style tier.
+  const align: TextAlign = tier.align === 'justify' ? 'left' : tier.align;
+  if (tier.align === 'justify') dropped.add('textAlign (justify — engine work)');
   const spaceBefore = tier.spaceBefore != null && tier.spaceBefore > 0 ? tier.spaceBefore : undefined;
   const spaceAfter = tier.spaceAfter != null && tier.spaceAfter > 0 ? tier.spaceAfter : undefined;
 

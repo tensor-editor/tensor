@@ -1,6 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import {
+  ALargeSmall,
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignVerticalSpaceAround,
+  AlignRight,
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Bold,
+  CaseLower,
+  CaseSensitive,
+  CaseUpper,
+  Highlighter,
+  Indent,
+  IndentDecrease,
+  IndentIncrease,
+  Italic,
+  Strikethrough,
+  Tag,
+  Text,
+  Type,
+  Underline,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -10,32 +34,34 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { IconButton } from '@/components/layout/IconButton';
+import { ColorPickerButton } from '@/components/layout/ribbon/ColorPickerButton';
 import { useDocumentStore } from '@/lib/document/store';
 import { useConfigStore } from '@/lib/config/store';
 import { useStyleRegistryStore } from '@/lib/styles/registry';
 import { baselineRunStyle, inlineStyle, resolveRun } from '@/lib/styles/resolve';
 import { captureStyleFromSelection } from '@/lib/styles/selection';
-import { isBuiltinId, type StyleKind, type StyleProperties } from '@/lib/styles/types';
+import { PT_PER_PX, fontPxToDisplayPt, fontPtToPx } from '@/lib/editor/fontSize';
+import { isBuiltinId, type StyleKind, type StyleProperties, type TextTransform } from '@/lib/styles/types';
 
 /**
- * The style editor (M-STYLES STEP 4 + addendum 2): name + property
- * fields + a LIVE PREVIEW paragraph wired to the SAME resolveRun the
- * editor resolves through (no parallel preview logic — the preview
- * renders the draft definition's inlineStyle, the one CSS serializer
- * the pageless sheet uses).
+ * The style editor (M-STYLES STEP 4 + addendum 2), UI-polished:
  *
- * CREATE mode opens with the selection's EFFECTIVE formatting captured
- * (reverse resolution). SAVING over an existing style is a DEFINITION
- * EDIT through the registry store — the epoch bump restyles every
- * user in both modes; nothing is ever stamped onto nodes.
+ * LAYOUT, top to bottom — name/font/font-size, then the EDITABLE
+ * centered live preview (no label), then the icon-button tiers
+ * (B/I/U/S | alignment | case | colors), then the remaining measure
+ * inputs, each wearing its lucide icon in the label. The preview is
+ * wired to the SAME resolveRun both render modes use — no parallel
+ * preview logic — and its SAMPLE TEXT is editable (type your own).
+ *
+ * Validation is INK ON THE CONTROL: a missing name rings the name box
+ * (aria-invalid), never a floating red line.
+ *
+ * Measurements speak POINTS at the chrome and commit px (M6-PRE).
+ * CREATE mode captures the selection's EFFECTIVE formatting (reverse
+ * resolution). SAVING over an existing style is a DEFINITION EDIT
+ * through the registry-epoch path — never a stamp.
  */
 
 export interface StyleDialogState {
@@ -46,29 +72,71 @@ export interface StyleDialogState {
   kind: StyleKind;
 }
 
-interface PropertyFieldProps {
-  label: string;
-  children: React.ReactNode;
+/** IconButton-sized toggle pill for the Paragraph/Text kind. */
+function KindToggle({ kind, onChange, disabled }: { kind: StyleKind; onChange: (k: StyleKind) => void; disabled?: boolean }) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-lg border border-border" data-testid="style-kind-toggle">
+      {([['paragraph', 'Paragraph'], ['character', 'Text']] as const).map(([k, label]) => (
+        <Tooltip key={k}>
+          <TooltipTrigger
+            render={
+              <button
+                className={`px-2.5 py-1 text-xs transition-colors ${
+                  kind === k ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'
+                }`}
+                onClick={() => onChange(k)}
+                disabled={disabled}
+                aria-pressed={kind === k}
+              >
+                {label}
+              </button>
+            }
+          />
+          <TooltipContent>
+            {k === 'paragraph' ? 'Paragraph style — block-level formatting' : 'Text style — span-level formatting'}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
 }
 
-function PropertyField({ label, children }: PropertyFieldProps) {
+function Field({
+  label,
+  icon,
+  children,
+  invalid,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  invalid?: boolean;
+}) {
   return (
     <label className="flex items-center justify-between gap-3 text-sm">
-      <span className="text-muted-foreground">{label}</span>
+      <span className={`flex items-center gap-1.5 text-muted-foreground ${invalid ? 'text-destructive' : ''}`}>
+        {icon}
+        {label}
+      </span>
       {children}
     </label>
   );
 }
 
-function NumberField({
-  value,
+function SmallIcon({ children }: { children: React.ReactNode }) {
+  return <span className="text-muted-foreground [&>svg]:size-3.5">{children}</span>;
+}
+
+/** Measurement input: displays pt, commits px (chrome law, M6-PRE). */
+function PtField({
+  px,
   onChange,
   placeholder,
   min,
   step = 1,
 }: {
-  value: number | undefined;
-  onChange: (v: number | undefined) => void;
+  px: number | undefined;
+  onChange: (px: number | undefined) => void;
   placeholder?: string;
   min?: number;
   step?: number;
@@ -77,27 +145,21 @@ function NumberField({
     <Input
       type="number"
       className="h-7 w-24 text-right"
-      value={value ?? ''}
-      min={min}
+      value={px != null ? fontPxToDisplayPt(px) : ''}
+      min={min != null ? Math.round(min * PT_PER_PX) : undefined}
       step={step}
       placeholder={placeholder}
       onChange={(e) => {
         const raw = e.target.value;
         if (raw === '') return onChange(undefined);
-        const n = parseFloat(raw);
-        if (Number.isFinite(n)) onChange(n);
+        const pt = parseFloat(raw);
+        if (Number.isFinite(pt)) onChange(fontPtToPx(pt));
       }}
     />
   );
 }
 
-const TRANSFORM_OPTIONS: Array<{ value: StyleProperties['textTransform']; label: string }> = [
-  { value: 'none', label: 'None' },
-  { value: 'uppercase', label: 'UPPERCASE' },
-  { value: 'lowercase', label: 'lowercase' },
-  { value: 'capitalize', label: 'Capitalize Words' },
-  { value: 'title-case', label: 'Title Case' },
-];
+const PREVIEW_SAMPLE = 'The quick brown fox jumps over the lazy dog';
 
 export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClose: () => void }) {
   const editor = useDocumentStore((s) => s.editor);
@@ -111,9 +173,9 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
   const editing = state.editingId ? (merged[state.editingId] ?? null) : null;
 
   const [name, setName] = useState('');
+  const [nameInvalid, setNameInvalid] = useState(false);
   const [kind, setKind] = useState<StyleKind>(state.kind);
   const [properties, setProperties] = useState<StyleProperties>({});
-  const [error, setError] = useState<string | null>(null);
 
   // Reset the draft when the dialog (re)opens: edit mode seeds from the
   // definition; create mode CAPTURES the selection's effective
@@ -121,7 +183,7 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
   // Normal span captures bold: true).
   useEffect(() => {
     if (!state.open) return;
-    setError(null);
+    setNameInvalid(false);
     if (editing) {
       setName(editing.name);
       setKind(editing.kind);
@@ -130,12 +192,11 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
       setKind(state.kind);
       if (editor) {
         const base = baselineRunStyle({ fontFamily: defaultFontFamily, fontSize: defaultFontSize });
-        const captured = captureStyleFromSelection(editor, base, merged);
-        setProperties(captured);
+        setProperties(captureStyleFromSelection(editor, base, merged));
       } else {
         setProperties({});
       }
-      setName(state.kind === 'character' ? 'New Character Style' : 'New Paragraph Style');
+      setName(state.kind === 'character' ? 'New Text Style' : 'New Paragraph Style');
     }
     // The capture intentionally runs once per open — re-capturing on
     // every keystroke in the dialog would fight the user's edits.
@@ -168,6 +229,7 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
       underline: resolved.underline,
       strike: resolved.strike,
       color: resolved.color !== '#000000' ? resolved.color : undefined,
+      highlight: resolved.highlight !== '' ? resolved.highlight : undefined,
       lineHeight: resolved.lineHeight !== 1 ? resolved.lineHeight : undefined,
       textTransform: resolved.textTransform !== 'none' ? resolved.textTransform : undefined,
       fontVariant: resolved.fontVariant !== 'normal' ? resolved.fontVariant : undefined,
@@ -175,11 +237,13 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [properties, kind, defaultFontFamily, defaultFontSize]);
 
+  // Validation is ink on the control: a missing name rings the box.
   const save = () => {
     if (!name.trim()) {
-      setError('A style needs a name.');
+      setNameInvalid(true);
       return;
     }
+    setNameInvalid(false);
     try {
       if (editing) {
         // DEFINITION EDIT — the registry-epoch path: every user of the
@@ -190,7 +254,9 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Unexpected store rejections (deleted-elsewhere races etc.)
+      // surface loudly in dev; the dialog stays open.
+      console.error('[styles] save failed:', err);
     }
   };
 
@@ -200,224 +266,243 @@ export function StyleDialog({ state, onClose }: { state: StyleDialogState; onClo
       deleteDefinition(editing.id);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      console.error('[styles] delete failed:', err);
     }
   };
 
+  // Case group: single-select transform buttons (none = all inactive);
+  // small caps is independent (fontVariant, not a transform).
+  const toggleTransform = (value: TextTransform) =>
+    set({ textTransform: properties.textTransform === value ? undefined : value });
+
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{editing ? `Edit Style: ${editing.name}` : 'New Style'}</DialogTitle>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader className="gap-1">
+          <div className="flex items-center justify-between pr-8">
+            <div className="flex items-center gap-2">
+              <DialogTitle>{editing ? `Edit Style: ${editing.name}` : 'New Style'}</DialogTitle>
+              {editing && isBuiltinId(editing.id) && <Badge variant="secondary">Built In</Badge>}
+            </div>
+            <KindToggle kind={kind} onChange={setKind} disabled={!!editing} />
+          </div>
           <DialogDescription>
             {editing
-              ? isBuiltinId(editing.id)
-                ? 'Built-in style — edits restyle every paragraph using it (never deletable).'
-                : 'Saving restyles every paragraph using this style.'
+              ? 'Saving restyles every paragraph using this style.'
               : 'Captured from the selection\u2019s effective formatting; saving applies to future uses.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3">
-          <PropertyField label="Name">
-            <Input className="h-7 w-48" value={name} onChange={(e) => setName(e.target.value)} />
-          </PropertyField>
-
-          {!editing && (
-            <PropertyField label="Kind">
-              <Select
-                value={kind}
-                onValueChange={(v) => setKind(v as StyleKind)}
-              >
-                <SelectTrigger className="h-7 w-48" size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="paragraph">Paragraph</SelectItem>
-                  <SelectItem value="character">Character</SelectItem>
-                </SelectContent>
-              </Select>
-            </PropertyField>
-          )}
-
-          <PropertyField label="Font family">
+        {/* Name / font / font size — above the preview. */}
+        <div className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
+          <Field label="Name" icon={<SmallIcon><Tag /></SmallIcon>} invalid={nameInvalid}>
             <Input
-              className="h-7 w-48"
+              className="h-7 w-36"
+              value={name}
+              aria-invalid={nameInvalid || undefined}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameInvalid && e.target.value.trim()) setNameInvalid(false);
+              }}
+            />
+          </Field>
+          <Field label="Font" icon={<SmallIcon><Type /></SmallIcon>}>
+            <Input
+              className="h-7 w-36"
               placeholder={defaultFontFamily}
               value={properties.fontFamily ?? ''}
               onChange={(e) => set({ fontFamily: e.target.value || undefined })}
             />
-          </PropertyField>
-          <PropertyField label="Font size (px)">
-            <NumberField
-              value={properties.fontSize}
+          </Field>
+          <Field label="Size" icon={<SmallIcon><Text /></SmallIcon>}>
+            <PtField
+              px={properties.fontSize}
               min={1}
-              placeholder={String(defaultFontSize)}
+              placeholder={`${fontPxToDisplayPt(defaultFontSize || 16)} pt`}
               onChange={(v) => set({ fontSize: v })}
             />
-          </PropertyField>
+          </Field>
+        </div>
 
-          <div className="flex items-center gap-5 pt-1">
-            {(['bold', 'italic', 'underline', 'strike'] as const).map((key) => (
-              <label key={key} className="flex items-center gap-1.5 text-sm capitalize">
-                <Switch
-                  size="sm"
-                  checked={properties[key] === true}
-                  onCheckedChange={(checked) => set({ [key]: checked || undefined } as Partial<StyleProperties>)}
-                />
-                {key}
-              </label>
-            ))}
+        {/* The EDITABLE live preview — centered, label-less, same
+            resolveRun both render modes use. Type your own sample:
+            UNCONTROLLED on purpose (constant children mean React never
+            diffs the typed text back — the caret survives keystrokes). */}
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <div
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-label="Style preview text"
+            data-testid="style-preview"
+            spellCheck={false}
+            className="min-h-[1.75rem] rounded bg-background p-2 text-center outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+            style={previewStyle}
+          >
+            {PREVIEW_SAMPLE}
           </div>
+        </div>
 
-          <PropertyField label="Color">
-            <input
-              type="color"
-              className="h-7 w-12 cursor-pointer rounded border border-input bg-transparent"
-              value={properties.color ?? '#000000'}
-              onChange={(e) => set({ color: e.target.value === '#000000' ? undefined : e.target.value })}
-            />
-          </PropertyField>
-
-          <PropertyField label="Line height">
-            <NumberField
-              value={properties.lineHeight}
-              min={0.25}
-              step={0.05}
-              placeholder="1.0"
-              onChange={(v) => set({ lineHeight: v })}
-            />
-          </PropertyField>
+        {/* Icon tiers: B/I/U/S | alignment | case | colors. */}
+        <div className="flex flex-wrap items-center mx-auto gap-0.5">
+          <IconButton
+            label="Bold"
+            icon={<Bold size={16} />}
+            active={properties.bold === true}
+            onClick={() => set({ bold: properties.bold === true ? undefined : true })}
+          />
+          <IconButton
+            label="Italic"
+            icon={<Italic size={16} />}
+            active={properties.italic === true}
+            onClick={() => set({ italic: properties.italic === true ? undefined : true })}
+          />
+          <IconButton
+            label="Underline"
+            icon={<Underline size={16} />}
+            active={properties.underline === true}
+            onClick={() => set({ underline: properties.underline === true ? undefined : true })}
+          />
+          <IconButton
+            label="Strikethrough"
+            icon={<Strikethrough size={16} />}
+            active={properties.strike === true}
+            onClick={() => set({ strike: properties.strike === true ? undefined : true })}
+          />
 
           {kind === 'paragraph' && (
             <>
-              <PropertyField label="Space before (px)">
-                <NumberField
-                  value={properties.spaceBefore}
-                  min={0}
-                  placeholder="0"
-                  onChange={(v) => set({ spaceBefore: v })}
-                />
-              </PropertyField>
-              <PropertyField label="Space after (px)">
-                <NumberField
-                  value={properties.spaceAfter}
-                  min={0}
-                  placeholder="0"
-                  onChange={(v) => set({ spaceAfter: v })}
-                />
-              </PropertyField>
-              <PropertyField label="Indent left (px)">
-                <NumberField
-                  value={properties.indentLeft}
-                  min={0}
-                  placeholder="0"
-                  onChange={(v) => set({ indentLeft: v })}
-                />
-              </PropertyField>
-              <PropertyField label="Indent right (px)">
-                <NumberField
-                  value={properties.indentRight}
-                  min={0}
-                  placeholder="0"
-                  onChange={(v) => set({ indentRight: v })}
-                />
-              </PropertyField>
-              <PropertyField label="First-line indent (px)">
-                <NumberField
-                  value={properties.firstLineIndent}
-                  placeholder="0"
-                  onChange={(v) => set({ firstLineIndent: v })}
-                />
-              </PropertyField>
-              <PropertyField label="Alignment">
-                <Select
-                  value={properties.textAlign ?? 'left'}
-                  onValueChange={(v) =>
-                    set({ textAlign: (v === 'left' ? undefined : v) as StyleProperties['textAlign'] })
+              <GroupDivider />
+              {(
+                [
+                  ['left', <AlignLeft size={16} key="l" />, 'Align Left'],
+                  ['center', <AlignCenter size={16} key="c" />, 'Align Center'],
+                  ['right', <AlignRight size={16} key="r" />, 'Align Right'],
+                  ['justify', <AlignJustify size={16} key="j" />, 'Align Justify'],
+                ] as const
+              ).map(([value, icon, label]) => (
+                <IconButton
+                  key={value}
+                  label={label}
+                  icon={icon}
+                  active={(properties.textAlign ?? 'left') === value}
+                  onClick={() =>
+                    set({ textAlign: value === 'left' ? undefined : (value as StyleProperties['textAlign']) })
                   }
-                >
-                  <SelectTrigger className="h-7 w-24" size="sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="left">Left</SelectItem>
-                    <SelectItem value="center">Center</SelectItem>
-                    <SelectItem value="right">Right</SelectItem>
-                  </SelectContent>
-                </Select>
-              </PropertyField>
+                />
+              ))}
             </>
           )}
 
-          <PropertyField label="Small caps">
-            <Select
-              value={properties.fontVariant ?? 'normal'}
-              onValueChange={(v) =>
-                set({ fontVariant: (v === 'normal' ? undefined : v) as StyleProperties['fontVariant'] })
-              }
-            >
-              <SelectTrigger className="h-7 w-24" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="small-caps">Small Caps</SelectItem>
-              </SelectContent>
-            </Select>
-          </PropertyField>
+          <GroupDivider />
+          <IconButton
+            label="Small Caps"
+            icon={<ALargeSmall size={16} />}
+            active={properties.fontVariant === 'small-caps'}
+            onClick={() =>
+              set({ fontVariant: properties.fontVariant === 'small-caps' ? undefined : 'small-caps' })
+            }
+          />
+          <IconButton
+            label="UPPERCASE"
+            icon={<CaseUpper size={16} />}
+            active={properties.textTransform === 'uppercase'}
+            onClick={() => toggleTransform('uppercase')}
+          />
+          <IconButton
+            label="lowercase"
+            icon={<CaseLower size={16} />}
+            active={properties.textTransform === 'lowercase'}
+            onClick={() => toggleTransform('lowercase')}
+          />
+          <IconButton
+            label="Title Case"
+            icon={<CaseSensitive size={16} />}
+            active={properties.textTransform === 'title-case' || properties.textTransform === 'capitalize'}
+            onClick={() => toggleTransform('title-case')}
+          />
 
-          <PropertyField label="Text transform">
-            <Select
-              value={properties.textTransform ?? 'none'}
-              onValueChange={(v) =>
-                set({ textTransform: (v === 'none' ? undefined : v) as StyleProperties['textTransform'] })
-              }
-            >
-              <SelectTrigger className="h-7 w-32" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TRANSFORM_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value!}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </PropertyField>
+          <GroupDivider />
+          <ColorPickerButton
+            label="Text Color"
+            resetLabel="Automatic"
+            icon={<span className="text-sm font-semibold">A</span>}
+            defaultColor={properties.color ?? '#000000'}
+            onChange={(color) => set({ color: color ?? undefined })}
+          />
+          <ColorPickerButton
+            label="Highlight Color"
+            resetLabel="Transparent"
+            icon={<Highlighter size={16} />}
+            defaultColor={properties.highlight ?? ''}
+            onChange={(color) => set({ highlight: color || undefined })}
+          />
+        </div>
 
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <div className="mb-1 text-xs text-muted-foreground">Live preview (resolveRun)</div>
-            <div className="rounded bg-background p-2" style={{ minHeight: '1.5rem' }}>
-              <span data-testid="style-preview" style={previewStyle}>
-                The quick brown fox jumps over the lazy dog
-              </span>
-            </div>
-          </div>
+        {/* Measure inputs, icons in their labels. */}
+        <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+          <Field label="Line height" icon={<SmallIcon><AlignVerticalSpaceAround /></SmallIcon>}>
+            <Input
+              type="number"
+              className="h-7 w-24 text-right"
+              value={properties.lineHeight ?? ''}
+              min={0.25}
+              step={0.05}
+              placeholder="1.0"
+              onChange={(e) => {
+                if (e.target.value === '') return set({ lineHeight: undefined });
+                const n = parseFloat(e.target.value);
+                if (Number.isFinite(n) && n > 0) set({ lineHeight: n });
+              }}
+            />
+          </Field>
 
-          {error && <div className="text-sm text-destructive">{error}</div>}
+          {kind === 'paragraph' && (
+            <>
+              <Field label="Space before" icon={<SmallIcon><ArrowUpToLine /></SmallIcon>}>
+                <PtField px={properties.spaceBefore} min={0} placeholder="0 pt" onChange={(v) => set({ spaceBefore: v })} />
+              </Field>
+              <Field label="Space after" icon={<SmallIcon><ArrowDownToLine /></SmallIcon>}>
+                <PtField px={properties.spaceAfter} min={0} placeholder="0 pt" onChange={(v) => set({ spaceAfter: v })} />
+              </Field>
+              <Field label="Indent left" icon={<SmallIcon><IndentIncrease /></SmallIcon>}>
+                <PtField px={properties.indentLeft} min={0} placeholder="0 pt" onChange={(v) => set({ indentLeft: v })} />
+              </Field>
+              <Field label="Indent right" icon={<SmallIcon><IndentDecrease /></SmallIcon>}>
+                <PtField px={properties.indentRight} min={0} placeholder="0 pt" onChange={(v) => set({ indentRight: v })} />
+              </Field>
+              <Field label="First-line indent" icon={<SmallIcon><Indent /></SmallIcon>}>
+                <PtField px={properties.firstLineIndent} placeholder="0 pt" onChange={(v) => set({ firstLineIndent: v })} />
+              </Field>
+            </>
+          )}
         </div>
 
         <DialogFooter>
           {editing && !isBuiltinId(editing.id) && (
-            <Button variant="outline" className="gap-1.5 text-destructive" onClick={remove}>
-              <Trash2 size={14} />
+            <Button variant="outline" className="text-destructive" onClick={remove}>
               Delete
             </Button>
           )}
           {editing && isBuiltinId(editing.id) && (
-            <Button variant="outline" className="gap-1.5 opacity-60" disabled title="Built-in styles cannot be deleted">
-              <Trash2 size={14} />
-              Delete
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="outline" className="gap-1.5 opacity-60" disabled>
+                    Delete
+                  </Button>
+                }
+              />
+              <TooltipContent>Built-in styles cannot be deleted</TooltipContent>
+            </Tooltip>
           )}
-          <Button onClick={save}>
-            <Pencil size={14} className="mr-1" />
-            {editing ? 'Save Style' : 'Create Style'}
-          </Button>
+          <Button onClick={save}>{editing ? 'Save Style' : 'Create Style'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function GroupDivider() {
+  return <div className="mx-1 h-5 w-px bg-border" />;
 }

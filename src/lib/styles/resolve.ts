@@ -24,6 +24,8 @@ export interface RunStyle {
   underline: boolean;
   strike: boolean;
   color: string;
+  /** Highlight background; '' = none (paint tier). */
+  highlight: string;
   lineHeight: number;
   fontVariant: 'small-caps' | 'normal';
   textTransform: TextTransform;
@@ -39,6 +41,7 @@ export function baselineRunStyle(base: TextStyle): RunStyle {
     underline: false,
     strike: false,
     color: '#000000',
+    highlight: '',
     lineHeight: 1,
     fontVariant: 'normal',
     textTransform: 'none',
@@ -81,6 +84,7 @@ export function resolveRun(tiers: ResolveRunTiers): RunStyle {
     underline: pick(direct?.underline, char?.underline, paraDirect?.underline, para?.underline, base.underline),
     strike: pick(direct?.strike, char?.strike, paraDirect?.strike, para?.strike, base.strike),
     color: pick(direct?.color, char?.color, paraDirect?.color, para?.color, base.color),
+    highlight: pick(direct?.highlight, char?.highlight, paraDirect?.highlight, para?.highlight, base.highlight),
     lineHeight: pick(direct?.lineHeight, char?.lineHeight, paraDirect?.lineHeight, para?.lineHeight, base.lineHeight),
     fontVariant: pick(direct?.fontVariant, char?.fontVariant, paraDirect?.fontVariant, para?.fontVariant, base.fontVariant),
     textTransform: pick(
@@ -101,7 +105,10 @@ export interface BlockTier {
   indentLeft: number;
   indentRight: number;
   firstLineIndent?: number;
-  align: TextAlign;
+  /** 'justify' passes through here for the pageless CSS to render; the
+   * ADAPTER sanitizes it to left + the loud dropped-attr warning
+   * (justify is engine work — the same ruling the textAlign attr has). */
+  align: TextAlign | 'justify';
 }
 
 export interface BlockTierAttrs {
@@ -136,7 +143,9 @@ export function resolveBlockTier(
   const attrIndentRight = numOrUndefined(attrs.indentRight);
   const attrFirstLine = numOrUndefined(attrs.firstLineIndent);
   const attrAlign =
-    attrs.textAlign === 'center' || attrs.textAlign === 'right' ? (attrs.textAlign as TextAlign) : undefined;
+    attrs.textAlign === 'center' || attrs.textAlign === 'right' || attrs.textAlign === 'justify'
+      ? (attrs.textAlign as TextAlign | 'justify')
+      : undefined;
 
   return {
     spaceBefore: attrSpaceBefore !== undefined && attrSpaceBefore > 0
@@ -146,7 +155,7 @@ export function resolveBlockTier(
     indentLeft: baseIndentLeft + (attrIndentLeft ?? p?.indentLeft ?? 0),
     indentRight: attrIndentRight ?? p?.indentRight ?? 0,
     firstLineIndent: attrs.firstLineIndent != null ? attrFirstLine : p?.firstLineIndent,
-    align: attrAlign ?? (p?.textAlign as TextAlign | undefined) ?? 'left',
+    align: attrAlign ?? (p?.textAlign as TextAlign | 'justify' | undefined) ?? 'left',
   };
 }
 
@@ -262,6 +271,7 @@ export function captureFromResolved(resolved: RunStyle, baseline: RunStyle): Sty
   if (resolved.underline !== baseline.underline) props.underline = resolved.underline;
   if (resolved.strike !== baseline.strike) props.strike = resolved.strike;
   if (resolved.color !== baseline.color) props.color = resolved.color;
+  if (resolved.highlight !== baseline.highlight) props.highlight = resolved.highlight || undefined;
   if (resolved.lineHeight !== baseline.lineHeight) props.lineHeight = resolved.lineHeight;
   if (resolved.fontVariant !== baseline.fontVariant) props.fontVariant = resolved.fontVariant;
   if (resolved.textTransform !== baseline.textTransform) props.textTransform = resolved.textTransform;
@@ -287,6 +297,7 @@ export function cssDeclarations(properties: StyleProperties): string[] {
     decls.push(`text-decoration: ${lines.length ? lines.join(' ') : 'none'}`);
   }
   if (p.color !== undefined) decls.push(`color: ${p.color}`);
+  if (p.highlight !== undefined) decls.push(`background-color: ${p.highlight}`);
   if (p.lineHeight !== undefined) decls.push(`line-height: ${p.lineHeight}`);
   if (p.spaceBefore !== undefined) decls.push(`margin-top: ${p.spaceBefore}px`);
   if (p.spaceAfter !== undefined) decls.push(`margin-bottom: ${p.spaceAfter}px`);
