@@ -8,6 +8,11 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
+  define: {
+    // M5.8 measurement builds: BENCH_AUTO=1 npm run build auto-runs the
+    // differential on boot (test binaries only; never in plain builds).
+    __BENCH_AUTO__: JSON.stringify(process.env.BENCH_AUTO === '1'),
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),

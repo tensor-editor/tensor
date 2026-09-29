@@ -2,6 +2,7 @@ import { writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { appDataDir, join } from '@tauri-apps/api/path';
 import type { Editor } from '@tiptap/core';
 import { CURRENT_DOCUMENT_VERSION, type DocumentFile } from './schema';
+import type { PageSetup } from './pageSetup';
 
 // Stable per-app-launch id, used for recovery files of never-yet-saved
 // documents (no real filePath to derive an identity from).
@@ -26,7 +27,11 @@ async function getRecoveryPath(originalPath: string | null): Promise<string> {
   return join(recoveryDir, `${key}.wpdoc`);
 }
 
-export async function saveRecoveryCopy(editor: Editor, originalPath: string | null): Promise<void> {
+export async function saveRecoveryCopy(
+  editor: Editor,
+  originalPath: string | null,
+  pageSetup: PageSetup
+): Promise<void> {
   try {
     const file: DocumentFile = {
       version: CURRENT_DOCUMENT_VERSION,
@@ -34,6 +39,7 @@ export async function saveRecoveryCopy(editor: Editor, originalPath: string | nu
       metadata: {
         modifiedAt: new Date().toISOString(),
         originalPath: originalPath ?? undefined,
+        pageSetup,
       },
     };
     const path = await getRecoveryPath(originalPath);

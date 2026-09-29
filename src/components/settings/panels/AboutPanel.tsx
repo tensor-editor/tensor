@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Github, Bug, Lightbulb, ScrollText, Users, Package, ExternalLink, ChevronDown, FolderGit2 } from 'lucide-react';
+import { Bug, Lightbulb, ScrollText, Users, ExternalLink, ChevronDown, FolderGit2 } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { TensorLogo } from '@/components/icons/TensorIcon';
 import { Input } from '@/components/ui/input';

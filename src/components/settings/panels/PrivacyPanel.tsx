@@ -27,7 +27,7 @@ function Row({ icon, label, description, children }: { icon: ReactNode; label: s
 }
 
 export function PrivacyPanel() {
-  const fetchLinkMetadata = useConfigStore((s) => s.config.editor.fetchLinkMetadata);
+  const fetchLinkMetadata = useConfigStore((s) => s.config.privacy.fetchLinkMetadata);
   const setFetchLinkMetadata = useConfigStore((s) => s.setFetchLinkMetadata);
   const autoCheckForUpdates = useConfigStore((s) => s.config.privacy.autoCheckForUpdates);
   const setAutoCheckForUpdates = useConfigStore((s) => s.setAutoCheckForUpdates);

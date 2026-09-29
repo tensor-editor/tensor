@@ -1,14 +1,104 @@
-import { RulerDimensionLine, RectangleHorizontal, FileText, PaintBucket } from 'lucide-react';
+import { RulerDimensionLine, RectangleHorizontal, RectangleVertical, PaintBucket, Proportions } from 'lucide-react';
 import { RibbonGroup } from '../../../RibbonGroup';
 import { IconButton } from '../../../IconButton';
+import { ColorPickerButton } from '../../ColorPickerButton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useDocumentStore } from '@/lib/document/store';
+import { useDocumentPropertiesStore } from '@/lib/document/propertiesStore';
+import { useConfigStore } from '@/lib/config/store';
+import { PAGE_SIZES } from '@/lib/document/pageSetup';
 
+/**
+ * Layout tab > Page Setup: paper size (with custom), orientation,
+ * page background, and margins — all writing useDocumentStore.setPageSetup,
+ * which persists via .wpdoc metadata and reflows the document
+ * immediately (L4: pageSetup is read per layout call).
+ *
+ * Selecting "Custom…" only opens the CustomPageSizeDialog — the
+ * document changes when the user confirms in the dialog (Done), not
+ * at dropdown-selection time.
+ *
+ * PAGELESS MODE disables — but never removes — the PAGE GEOMETRY
+ * controls (paper size, orientation, margins): they are paginated
+ * facts with no pageless meaning. Page Background stays LIVE in both
+ * modes (one setting, two surfaces: paginated sheets and the pageless
+ * editing surface both paint pageSetup.pageColor).
+ */
 export function PageSetupGroup() {
+  const pageSetup = useDocumentStore((s) => s.pageSetup);
+  const setPageSetup = useDocumentStore((s) => s.setPageSetup);
+  const isLandscape = pageSetup.orientation === 'landscape';
+  const isPageless = useConfigStore((s) => s.config.editor.defaultPageLayout) !== 'Pages';
+
+  function handlePageSizeChange(value: string) {
+    if (isPageless) return;
+    if (value === 'custom') {
+      useDocumentPropertiesStore.getState().openCustomSize();
+      return;
+    }
+    setPageSetup({ ...pageSetup, pageSize: value });
+  }
+
   return (
     <RibbonGroup>
-      <IconButton label="Margins" icon={<RulerDimensionLine size={16} />} onClick={() => {}} disabled />
-      <IconButton label="Orientation" icon={<RectangleHorizontal size={16} />} onClick={() => {}} disabled />
-      <IconButton label="Paper Size" icon={<FileText size={16} />} onClick={() => { }} disabled />
-      <IconButton label="Page Background" icon={<PaintBucket size={16} />} onClick={() => {}} disabled/>
+      {/* Margins entrance (M6 ruling): Layout > Margins opens the
+          commit-gated dialog — the ONE margins control surface. */}
+      <IconButton
+        label="Margins"
+        icon={<RulerDimensionLine size={16} />}
+        onClick={() => useDocumentPropertiesStore.getState().openMargins()}
+        disabled={isPageless}
+      />
+
+      <IconButton
+        label="Orientation"
+        icon={isLandscape ? <RectangleHorizontal size={16} /> : <RectangleVertical size={16} />}
+        onClick={() =>
+          setPageSetup({ ...pageSetup, orientation: isLandscape ? 'portrait' : 'landscape' })
+        }
+        disabled={isPageless}
+      />
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Select
+              value={pageSetup.pageSize}
+              disabled={isPageless}
+              onValueChange={(value) => {
+                if (value != null) handlePageSizeChange(value);
+              }}
+            >
+              <SelectTrigger aria-label="Paper Size" className="mx-1.5 h-8 w-32 gap-1.5 text-sm">
+                <Proportions size={14} className="shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="Paper Size" />
+              </SelectTrigger>
+              <SelectContent
+                alignItemWithTrigger={false}
+                className="w-64"
+                >
+                {Object.entries(PAGE_SIZES).map(([key, preset]) => (
+                  <SelectItem key={key} value={key}>
+                    {key} <span className="text-muted-foreground">({preset.inches})</span>
+                  </SelectItem>
+                ))}
+                <SelectItem value="custom">Custom…</SelectItem>
+              </SelectContent>
+            </Select>
+          }
+        />
+        <TooltipContent>Paper Size</TooltipContent>
+      </Tooltip>
+
+      <ColorPickerButton
+        label="Page Background"
+        icon={<PaintBucket size={16} />}
+        resetLabel="Default"
+        resetColor="#ffffff"
+        defaultColor={pageSetup.pageColor || '#ffffff'}
+        onChange={(color) => setPageSetup({ ...pageSetup, pageColor: color ?? '' })}
+      />
     </RibbonGroup>
   );
 }

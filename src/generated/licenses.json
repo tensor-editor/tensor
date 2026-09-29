@@ -510,6 +510,12 @@
     "repository": "https://github.com/tauri-apps/tauri"
   },
   {
+    "name": "@tauri-apps/plugin-clipboard-manager",
+    "version": "2.3.3",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/tauri-apps/plugins-workspace"
+  },
+  {
     "name": "@tauri-apps/plugin-dialog",
     "version": "2.7.3",
     "license": "MIT OR Apache-2.0",
@@ -532,6 +538,12 @@
     "version": "2.5.5",
     "license": "MIT OR Apache-2.0",
     "repository": "https://github.com/tauri-apps/plugins-workspace"
+  },
+  {
+    "name": "@tensor-editor/engine",
+    "version": "0.0.1",
+    "license": "AGPL-3.0-only",
+    "repository": null
   },
   {
     "name": "@tiptap/core",
@@ -2053,7 +2065,13 @@
   },
   {
     "name": "nanoid",
-    "version": "3.3.18",
+    "version": "3.3.19",
+    "license": "MIT",
+    "repository": "https://github.com/ai/nanoid"
+  },
+  {
+    "name": "nanoid",
+    "version": "6.0.1",
     "license": "MIT",
     "repository": "https://github.com/ai/nanoid"
   },

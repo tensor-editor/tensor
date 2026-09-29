@@ -7,7 +7,6 @@ export function getMaxReferencedGroup(template: string): number {
   let max = 0;
   const re = /\$(\$|&|\d{1,2})/g;
   let m: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((m = re.exec(template)) !== null) {
     if (m[1] === '$' || m[1] === '&') continue;
     max = Math.max(max, parseInt(m[1], 10));

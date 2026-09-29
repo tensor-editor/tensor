@@ -26,7 +26,7 @@ export function useSearchMatches(editor: Editor | null): SearchMatchesState {
     }
 
     const sync = () => {
-      const storage = editor.storage.search as SearchMatchesState | undefined;
+      const storage = editor.storage.search;
       setState({
         matches: storage?.matches ?? [],
         currentIndex: storage?.currentIndex ?? -1,
@@ -54,6 +54,13 @@ export function useScrollToCurrentSearchMatch(currentIndex: number, matchCount: 
   useEffect(() => {
     if (currentIndex < 0 || matchCount === 0) return;
     const el = document.querySelector('.tensor-search-match-current');
+    // Match decorations live in the PM view — in paginated mode that
+    // is the hidden input-only view (L3), whose geometry is meaningless;
+    // scrollIntoView against it would scroll the desk to nonsense
+    // coordinates. Skip there (pageless and the paginated fallback render
+    // the view visibly, where native scroll is correct). The paginated
+    // search path scrolls the current match by painted coordinates.
+    if (el?.closest('.pm-input-only')) return;
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [currentIndex, matchCount]);
 }

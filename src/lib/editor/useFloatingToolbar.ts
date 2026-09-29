@@ -36,6 +36,12 @@ export function useFloatingToolbar(editor: Editor | null, enabled: boolean) {
       // Use the real DOM selection's rendered geometry rather than
       // coordsAtPos, which has proven unreliable specifically at line-start/
       // soft-wrap boundaries (confirmed via direct measurement earlier).
+      // Also checked against the page-break coordsAtPos/posAtCoords
+      // discontinuity audit (see breakBoundaryCorrection.ts): this file has
+      // zero coordsAtPos/posAtCoords calls, so it can't hit that
+      // discontinuity directly - a "toolbar on the wrong line" symptom seen
+      // near a page break was traced to a since-fixed bug corrupting the DOM
+      // this file's getClientRects() measures, not a bug in this file.
       const domSelection = window.getSelection();
       if (!domSelection || domSelection.rangeCount === 0) return;
 

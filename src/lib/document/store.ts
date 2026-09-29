@@ -4,7 +4,7 @@ import { message } from '@tauri-apps/plugin-dialog';
 import { saveDocument, saveDocumentAs, openDocument } from './fileOperations';
 import { clearRecoveryCopy } from './recovery';
 import { useConfigStore } from '../config/store';
-import type { PageSetup } from '../pagination/constants';
+import type { PageSetup } from './pageSetup';
 
 function defaultPageSetup(): PageSetup {
   const { config } = useConfigStore.getState();
@@ -88,3 +88,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
   },
 }));
+
+// The store above is created at module init — before the persisted
+// config.json is loaded by useConfigPersistence — so the initial
+// pageSetup captures pre-load defaults. Re-derive it from the config
+// store whenever that changes, but only while the document is pristine:
+// once a file is opened (it carries its own pageSetup) or the current
+// one is edited, the document owns its setup.
+useConfigStore.subscribe(() => {
+  const { filePath, isDirty } = useDocumentStore.getState();
+  if (!filePath && !isDirty) {
+    useDocumentStore.setState({ pageSetup: defaultPageSetup() });
+  }
+});

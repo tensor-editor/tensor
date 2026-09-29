@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ArrowUpRight, CaseSensitive, PanelRightOpen, Regex } from 'lucide-react';
+import { ArrowUpRight, CaseSensitive, Regex } from 'lucide-react';
 import { useDocumentStore } from '@/lib/document/store';
 import { useSearchStore } from '@/lib/editor/search/store';
 import { useSearchMatches, useScrollToCurrentSearchMatch } from '@/lib/editor/search/useSearchMatches';

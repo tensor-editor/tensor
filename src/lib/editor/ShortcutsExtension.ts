@@ -6,6 +6,7 @@ import { useSidebarStore } from '@/lib/layout/sidebarStore';
 import { useSettingsDialogStore } from '@/lib/settings/store';
 import { useLinkEditorStore } from '@/lib/editor/linkEditorStore';
 import { getEffectiveKeybinding, matchesShortcut, SHORTCUTS } from '@/lib/shortcuts';
+import { stepFontSize } from '@/lib/editor/fontSize';
 
 const EDITOR_COMMAND_MAP: Record<string, (editor: Editor) => boolean> = {
   bold: (editor) => editor.commands.toggleBold(),
@@ -22,6 +23,9 @@ const EDITOR_COMMAND_MAP: Record<string, (editor: Editor) => boolean> = {
   increaseIndent: (editor) => editor.commands.increaseIndent(),
   decreaseIndent: (editor) => editor.commands.decreaseIndent(),
   clearFormatting: (editor) => editor.commands.clearFormatting(),
+  // ±2pt in chrome space, committed as px (fontSize.ts law).
+  fontSizeUp: (editor) => stepFontSize(editor, 1),
+  fontSizeDown: (editor) => stepFontSize(editor, -1),
   find: () => {
     const sidebarActive = useSidebarStore.getState().active?.id === 'search';
     if (sidebarActive) {

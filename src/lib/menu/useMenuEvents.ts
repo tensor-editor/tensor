@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDocumentStore } from '../document/store';
 import { useConfigStore } from '../config/store';
+import { pasteFromSystemClipboard } from '@/lib/editor/clipboard';
 
 export function useMenuEvents() {
   useEffect(() => {
@@ -33,7 +34,7 @@ export function useMenuEvents() {
           document.execCommand('copy');
           break;
         case 'menu-paste':
-          document.execCommand('paste');
+          if (doc.editor) void pasteFromSystemClipboard(doc.editor);
           break;
         case 'menu-toggle-dark-mode': {
           const { config, setTheme } = useConfigStore.getState();
