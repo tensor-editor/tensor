@@ -40,7 +40,7 @@ export async function saveConfigToDisk(config: Config): Promise<void> {
 
 /**
  * Opens the OS file manager with config.json highlighted, for the
- * Settings > About "Configuration File" button. In the extremely narrow
+ * Settings > About "Configuration Files" button. In the extremely narrow
  * window where a user opens Settings before the very first debounced
  * save has landed (in practice, the load effect in useConfigPersistence
  * itself triggers an initial re-save almost immediately, so this is
