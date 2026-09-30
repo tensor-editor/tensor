@@ -18,6 +18,7 @@ import { useAutosave } from './lib/document/useAutosave';
 import { useMenuEvents } from './lib/menu/useMenuEvents';
 import { useStyleRegistryStore } from './lib/styles/registry';
 import { useFontRegistryStore } from './lib/fonts/registry';
+import { prefetchCatalogs } from './lib/fonts/catalogs';
 import { useStyleDialogStore } from './lib/styles/dialogStore';
 import { StatusBar } from './components/layout/StatusBar';
 import { Ribbon } from './components/layout/Ribbon';
@@ -42,6 +43,17 @@ function App() {
   useEffect(() => {
     void useFontRegistryStore.getState().loadFromDisk();
   }, []);
+
+  // M-FONTS-B: when the user has opted into online catalogs, warm the
+  // list-all metadata (Google + Fontsource) once per session — the
+  // ON-toggle consent ruling. No code path reaches the network while
+  // the toggle is off.
+  const allowFontCatalogs = useConfigStore((s) => s.config.privacy.allowFontCatalogs);
+  useEffect(() => {
+    if (allowFontCatalogs) {
+      void prefetchCatalogs();
+    }
+  }, [allowFontCatalogs]);
 
   // Differential benchmark. Triggers: URL #bench/?bench, OR five
   // rapid clicks on the StatusBar (mouse-only driving — the test box's

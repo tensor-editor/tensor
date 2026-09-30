@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Pencil, Plus } from 'lucide-react';
+import { ChevronDown, Pencil, Plus, Type } from 'lucide-react';
 import { useEditorState } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -129,7 +129,10 @@ export function StylesDropdown({ editor }: { editor: Editor }) {
               className="h-8 w-36 justify-between gap-2 px-2 text-sm font-normal"
               aria-label={`Styles (current: ${currentStyleName})`}
             >
-              <span className="truncate">{currentStyleName}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Type size={12} className="shrink-0 text-muted-foreground" />
+                <span className="truncate">{currentStyleName}</span>
+              </span>
               <ChevronDown size={12} className="shrink-0 opacity-60" />
             </Button>
           }

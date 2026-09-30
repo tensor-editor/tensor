@@ -119,7 +119,7 @@ function fixtureBytes(): Uint8Array {
 // ─── Store resets ─────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  useFontRegistryStore.setState({ entries: [...BUNDLED_FONTS], epoch: 0, status: 'idle' });
+  useFontRegistryStore.setState({ entries: [...BUNDLED_FONTS], epoch: 0, status: 'idle', recentFamilies: [] });
   useFontBrowserStore.setState({ isOpen: false, selectedId: null });
   useDocumentStore.setState({
     pageSetup: { pageSize: 'Letter', margins: DEFAULT_MARGINS, pageGap: PAGE_GAP },
@@ -286,7 +286,7 @@ describe('persistence round-trip', () => {
     expect(file.entries[0].family).toBe('Typo Family');
 
     // Simulate relaunch: fresh store state, fonts.json on disk.
-    useFontRegistryStore.setState({ entries: [...BUNDLED_FONTS], epoch: 0, status: 'idle' });
+    useFontRegistryStore.setState({ entries: [...BUNDLED_FONTS], epoch: 0, status: 'idle', recentFamilies: [] });
     const faceBefore = [...(document.fonts as unknown as Iterable<{ family: string }>)].find(
       (f) => f.family === 'Typo Family',
     );
@@ -540,6 +540,11 @@ describe('Font Browser + entry points', () => {
     expect(document.querySelector('[data-testid="font-badge-bundled"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="font-badge-system"]')).not.toBeNull();
     expect(document.body.textContent).not.toContain('BUNDLED');
+    // Style + direction badges replace the old prose subtitle:
+    expect(document.querySelector('[data-testid="font-styles-badge"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="font-direction-badge"]')?.textContent).toBe('LTR');
+    // Tooltips are bare source names now — no "Source (...)" wrapper:
+    expect(document.body.textContent).not.toContain('Source (');
   });
 
   it('search narrows the list by name; source filters partition it', () => {
@@ -572,23 +577,34 @@ describe('Font Browser + entry points', () => {
     expect(rows.some((r) => r.getAttribute('data-testid') === 'font-row-bundled:open-sans')).toBe(false);
   });
 
-  it('the Google Fonts filter appears only when the privacy toggle is on (inert state B consumes)', () => {
+  it('the Online tab is ALWAYS visible; OFF shows the CloudOff Empty + link, ON the honest empty state', () => {
     act(() => {
       useFontBrowserStore.getState().open();
     });
     render(<FontBrowserDialog />);
-    expect(document.querySelector('[data-testid="font-filter-catalog"]')).toBeNull();
-    act(() => {
-      useConfigStore.getState().setAllowFontCatalogs(true);
-    });
+    // Always visible — previously installed catalog fonts stay
+    // reachable even with catalogs off:
     expect(document.querySelector('[data-testid="font-filter-catalog"]')).not.toBeNull();
-    // Filtering it with no catalog fonts yet: the honest empty state.
     act(() => {
       fireEvent.click(document.querySelector('[data-testid="font-filter-catalog"]')!);
     });
+    // OFF: CloudOff icon + the turn-on link (guidance moved out of
+    // the slim banner):
     expect(document.querySelector('[data-testid="font-list"]')!.textContent).toContain(
-      'No catalog fonts installed yet',
+      'no network requests',
     );
+    expect(document.querySelector('[data-testid="catalogs-off-link"]')).not.toBeNull();
+    const banner = document.querySelector('[data-testid="catalogs-off-banner"]')!;
+    expect(banner.textContent).toBe('Online catalogs are off'); // slim — icon + title
+    act(() => {
+      useConfigStore.getState().setAllowFontCatalogs(true);
+    });
+    // ON: the banner disappears; the Empty drops the link.
+    expect(document.querySelector('[data-testid="catalogs-off-banner"]')).toBeNull();
+    expect(document.querySelector('[data-testid="font-list"]')!.textContent).toContain(
+      'No online fonts installed yet',
+    );
+    expect(document.querySelector('[data-testid="catalogs-off-link"]')).toBeNull();
   });
 
   it('"Use this font" applies the selected family through the picker\u2019s own path', () => {
@@ -623,34 +639,62 @@ describe('Font Browser + entry points', () => {
     expect(nameInput.value).toBe('Typo Family'); // parsed from the fixture bytes
   });
 
-  it('FontGroup: picker reads the registry; the in-list Browse option opens the dialog', async () => {
+  it('FontGroup: the popover picker (StylesDropdown pattern) — alphabetical, recent, weights, Browse', async () => {
     const { editor } = renderTensor('<p>hello</p>');
     await settleLayout();
     render(<FontGroup />);
-    // Open the Select: base-ui renders items only while open. The
-    // trigger is the button carrying the select-value.
-    const trigger = [...document.querySelectorAll('button')].find(
-      (b) => b.querySelector('[data-slot="select-value"]') !== null,
-    )! as HTMLElement;
+    const trigger = document.querySelector('button[aria-label="Font Family"]') as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
     act(() => {
       fireEvent.click(trigger);
     });
-    const items = [...document.querySelectorAll('[data-slot="select-item"]')] as HTMLElement[];
-    expect(items.some((el) => el.textContent === 'Open Sans')).toBe(true); // fontsource
-    expect(items.some((el) => el.textContent === 'Georgia')).toBe(true); // system fallback
-    // The browse entry lives at the bottom of the list (no separate
-    // ribbon button):
+
+    // Alphabetical by DISPLAY name, wide popover, preview-rendered:
+    const allNames = [...document.querySelectorAll('[data-slot="popover-content"] [data-testid^="font-picker-row-"]')]
+      .map((el) => el.textContent);
+    expect(allNames.length).toBeGreaterThanOrEqual(19);
+    // Alphabetical (System UI sorts by display name, not 'system-ui').
+    // Recent rows (top of the popover) sit OUTSIDE the sort — skip
+    // them; a previous test's "Use font" may have recorded one.
+    const recentCount = document.body.textContent!.includes('Recently Used')
+      ? Math.max(1, useFontRegistryStore.getState().recentFamilies.length)
+      : 0;
+    const allSection = allNames.slice(recentCount);
+    const sorted = [...allSection].sort((a, b) => a!.localeCompare(b!));
+    expect(allSection).toEqual(sorted);
+    // 'system-ui' shows as "System UI"; Geist is just "Geist" (no Variable suffix):
+    expect(allSection).toContain('System UI');
+    expect(allSection).not.toContain('Geist Variable');
+    expect(allSection.some((n) => /\.?\s*Variable$/.test(n ?? ''))).toBe(false);
+
+    // Weight flyout: variable Geist offers axis stops; only 400/700
+    // selectable (the engine's two worlds), the rest disabled.
+    const geistRow = document.querySelector('[data-testid="font-picker-row-Geist Variable"]') as HTMLElement;
+    expect(geistRow.textContent).toContain('Geist'); // display name only
+    act(() => {
+      fireEvent.click(geistRow.querySelector('button[aria-label="Weights for Geist"]')!);
+    });
+    const light = document.querySelector('[data-testid="font-picker-weight-Geist Variable-300"]') as HTMLButtonElement;
+    expect(light.disabled).toBe(true);
+    const boldBtn = document.querySelector('[data-testid="font-picker-weight-Geist Variable-700"]') as HTMLButtonElement;
+    expect(boldBtn.disabled).toBe(false);
+
+    // Applying a font records it as recently used:
+    act(() => {
+      fireEvent.click(document.querySelector('[data-testid="font-picker-row-Open Sans"]')!.querySelector('button')!);
+    });
+    expect(editor.getAttributes('textStyle').fontFamily).toBe('Open Sans');
+    act(() => {
+      fireEvent.click(document.querySelector('button[aria-label="Font Family"]')!);
+    });
+    expect(document.querySelector('[data-testid="font-picker-row-Open Sans"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('Recently Used');
+
+    // The Browse row is a real item (bottom, full width):
     const browse = document.querySelector('[data-testid="font-picker-browse"]') as HTMLElement;
-    expect(browse).not.toBeNull();
     expect(browse.textContent).toContain('Browse Fonts');
-    const items2 = [...document.querySelectorAll('[data-slot="select-item"]')] as HTMLElement[];
-    expect(items2[items2.length - 1]).toBe(browse); // LAST in the list
-    // Selecting it opens the dialog and does NOT change the font:
     const before = editor.state.doc.toJSON();
     act(() => {
-      // base-ui only commits item clicks armed by a real pointerdown
-      // (the mouse-selection guard) — the gesture, not a bare click.
-      fireEvent.pointerDown(browse, { pointerType: 'mouse' });
       fireEvent.click(browse);
     });
     expect(useFontBrowserStore.getState().isOpen).toBe(true);

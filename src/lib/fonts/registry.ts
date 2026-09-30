@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { useDocumentStore } from '@/lib/document/store';
-import { readFile, readTextFile, writeTextFile, exists, mkdir, remove, copyFile } from '@tauri-apps/plugin-fs';
-import { appConfigDir, appDataDir, join } from '@tauri-apps/api/path';
+import { readFile, readTextFile, writeTextFile, writeFile, exists, mkdir, remove, copyFile } from '@tauri-apps/plugin-fs';
+import { appConfigDir, appDataDir, homeDir, join } from '@tauri-apps/api/path';
 import { BUNDLED_FONTS } from './bundled';
+import type { CatalogId, CatalogDownload } from './catalogs/types';
 import { parseFontFamilyName } from './fontName';
 
 /**
@@ -33,6 +34,8 @@ export interface FontFiles {
 
 export type FontSource = 'bundled' | 'system' | 'uploaded' | 'catalog';
 
+export type CatalogIdRef = import('./catalogs/types').CatalogId;
+
 export interface FontEntry {
   id: string;
   family: string;
@@ -40,8 +43,13 @@ export interface FontEntry {
   /** 'bundled' = ships with Tensor (Fontsource curated + Geist);
    *  'system' = the OS's fallback families (no files);
    *  'uploaded' = the user's uploads (files in appDataDir()/fonts/);
-   *  'catalog' = downloaded from an online catalog (milestone B). */
+   *  'catalog' = downloaded from an online catalog (M-FONTS-B). */
   source: FontSource;
+  /** For source 'catalog': WHICH catalog it came from (badge + chip). */
+  catalog?: CatalogIdRef;
+  /** Script direction for the LTR/RTL badge — derived at install time
+   *  from the source's subsets (arabic/hebrew → rtl); default ltr. */
+  direction?: 'ltr' | 'rtl';
   /** Uploaded: file names inside appDataDir()/fonts/. Bundled
    *  Fontsource: per-face CSS specifiers (bundled.ts). System
    *  fallbacks: undefined — the OS resolves them. */
@@ -64,6 +72,11 @@ interface FontRegistryState {
   /** Bumped on every successful register/unregister — the live
    *  relayout signal PaginatedView consumes. */
   epoch: number;
+  /** The ribbon picker's "recently used" section — most recent
+   *  first, capped at 5, session-scoped (app preference, not
+   *  persisted). Recorded on every font applied to a selection. */
+  recentFamilies: string[];
+  noteRecentFont: (family: string) => void;
   /** Whether loadFromDisk ran (app bootstrap). */
   status: 'idle' | 'ready' | 'error';
   loadFromDisk: () => Promise<void>;
@@ -75,6 +88,17 @@ interface FontRegistryState {
   /** Upload flow (see upload.ts): copy the file into appDataDir()/
    *  fonts/, register, persist. */
   addUploaded: (input: { family: string; displayName: string; sourcePath: string }) => Promise<FontEntry | null>;
+  /** M-FONTS-B catalog install — ALL-OR-NOTHING: every face's bytes
+   *  are written into appDataDir()/fonts/ before anything registers;
+   *  any failure removes the partial files and returns null (no
+   *  orphaned files, no partial registry entries per family). */
+  addCatalogFont: (input: {
+    family: string;
+    displayName: string;
+    catalog: CatalogId;
+    download: CatalogDownload;
+    direction?: 'ltr' | 'rtl';
+  }) => Promise<FontEntry | null>;
   uninstall: (id: string) => Promise<void>;
 }
 
@@ -86,6 +110,51 @@ async function fontsFilePath(): Promise<string> {
 async function fontsDirPath(): Promise<string> {
   const dir = await appDataDir();
   return join(dir, 'fonts');
+}
+
+/**
+ * M-FONTS-B: a genuine install also lands in the OS user fonts
+ * directory (~/.local/share/fonts/tensor/ — fontconfig scans XDG
+ * fonts recursively, so the family becomes available system-wide).
+ * Tensor's OWN registration stays sourced from appDataDir()/fonts/
+ * (never depends on fontconfig cache state); this copy is for the
+ * rest of the PC. Uninstall removes both. Failures here degrade to
+ * app-local-only — never fail the install.
+ */
+async function osFontsDirPath(): Promise<string> {
+  return join(await homeDir(), '.local', 'share', 'fonts', 'tensor');
+}
+
+/** OS copy naming — deterministic per family + face key. */
+function osFontFileName(family: string, key: string): string {
+  const safe = family.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `${safe || 'font'}-${key}.woff2`;
+}
+
+async function installToOs(family: string, faces: [string, Uint8Array][]): Promise<void> {
+  try {
+    const dir = await osFontsDirPath();
+    if (!(await exists(dir))) await mkdir(dir, { recursive: true });
+    for (const [key, bytes] of faces) {
+      await writeFile(await join(dir, osFontFileName(family, key)), bytes);
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[fonts] OS-level install skipped (app-local install stands):', err);
+    }
+  }
+}
+
+async function removeFromOs(family: string, keys: string[]): Promise<void> {
+  try {
+    const dir = await osFontsDirPath();
+    for (const key of keys) {
+      const path = await join(dir, osFontFileName(family, key));
+      if (await exists(path)) await remove(path);
+    }
+  } catch {
+    // best-effort — the app-local uninstall is the canonical one
+  }
 }
 
 function faceSpecs(entry: FontEntry): { file: string; weight: string; style: string }[] {
@@ -144,7 +213,13 @@ async function persistRegistry(entries: FontEntry[]): Promise<void> {
   // no appConfigDir — skip silently there (writeGlobalFile precedent).
   if (!('__TAURI_INTERNALS__' in globalThis)) return;
   try {
-    const file: FontsFile = { version: 1, entries: entries.filter((e) => e.source === 'uploaded') };
+    // EVERYTHING the user installed persists — uploads AND catalog
+    // downloads (the M-FONTS-B fix: closing Tensor must not wipe
+    // downloaded fonts). Bundled/system re-seed from code.
+    const file: FontsFile = {
+      version: 1,
+      entries: entries.filter((e) => e.source === 'uploaded' || e.source === 'catalog'),
+    };
     const path = await fontsFilePath();
     const dir = await appConfigDir();
     if (!(await exists(dir))) await mkdir(dir, { recursive: true });
@@ -160,6 +235,12 @@ export const useFontRegistryStore = create<FontRegistryState>((set, get) => ({
   entries: [...BUNDLED_FONTS],
   epoch: 0,
   status: 'idle',
+  recentFamilies: [],
+
+  noteRecentFont: (family) =>
+    set((s) => ({
+      recentFamilies: [family, ...s.recentFamilies.filter((f) => f !== family)].slice(0, 5),
+    })),
 
   loadFromDisk: async () => {
     try {
@@ -176,7 +257,10 @@ export const useFontRegistryStore = create<FontRegistryState>((set, get) => ({
         await get().registerFont(entry);
       }
       set((s) => ({
-        entries: [...BUNDLED_FONTS, ...s.entries.filter((e) => e.source === 'uploaded')],
+        entries: [
+          ...BUNDLED_FONTS,
+          ...s.entries.filter((e) => e.source === 'uploaded' || e.source === 'catalog'),
+        ],
         status: 'ready',
       }));
     } catch {
@@ -233,6 +317,10 @@ export const useFontRegistryStore = create<FontRegistryState>((set, get) => ({
       };
       const ok = await get().registerFont(entry);
       if (!ok) return null;
+      // Genuine install: the OS copy rides the same bytes (read back
+      // from the app-local file, never the possibly-out-of-scope
+      // source path).
+      await installToOs(family, [['regular', await readFile(await join(dir, fileName))]]);
       await persistRegistry(get().entries);
       return entry;
     } catch (err) {
@@ -241,9 +329,66 @@ export const useFontRegistryStore = create<FontRegistryState>((set, get) => ({
     }
   },
 
+  addCatalogFont: async ({ family, displayName, catalog, download, direction }) => {
+    const dir = await fontsDirPath();
+    if (!(await exists(dir))) await mkdir(dir, { recursive: true });
+    const id = nanoid(8);
+    const written: string[] = [];
+    const names: FontFiles = { regular: `${id}-regular.woff2` };
+    try {
+      const faces: [keyof FontFiles, Uint8Array | undefined, string][] = [
+        ['regular', download.files.regular, `${id}-regular.woff2`],
+        ['bold', download.files.bold, `${id}-bold.woff2`],
+        ['italic', download.files.italic, `${id}-italic.woff2`],
+        ['boldItalic', download.files.boldItalic, `${id}-bold-italic.woff2`],
+      ];
+      for (const [key, bytes, fileName] of faces) {
+        if (!bytes) continue;
+        await writeFile(await join(dir, fileName), bytes);
+        written.push(fileName);
+        names[key] = fileName;
+      }
+      const entry: FontEntry = {
+        id: `catalog:${catalog}:${id}`,
+        family,
+        displayName,
+        source: 'catalog',
+        catalog,
+        files: names,
+        variable: download.variable,
+        ...(direction ? { direction } : {}),
+        status: 'ready',
+      };
+      const ok = await get().registerFont(entry);
+      if (!ok) throw new Error('face registration failed');
+      // Genuine install: the same faces land in the OS user fonts dir
+      // (system-wide availability); failures degrade to app-local.
+      await installToOs(
+        family,
+        faces
+          .filter(([, bytes]) => bytes != null)
+          .map(([key, bytes]) => [key as string, bytes!] as [string, Uint8Array]),
+      );
+      await persistRegistry(get().entries);
+      return entry;
+    } catch (err) {
+      // All-or-nothing cleanup: remove every file written this call.
+      for (const fileName of written) {
+        try {
+          const path = await join(dir, fileName);
+          if (await exists(path)) await remove(path);
+        } catch {
+          // best-effort cleanup; the entry was never persisted
+        }
+      }
+      if (import.meta.env.DEV) console.warn('[fonts] catalog install failed (cleaned up):', err);
+      return null;
+    }
+  },
+
   uninstall: async (id) => {
     const entry = get().entries.find((e) => e.id === id);
-    if (!entry || entry.source !== 'uploaded') return;
+    if (!entry || (entry.source !== 'uploaded' && entry.source !== 'catalog')) return;
     // The warned-set site (styles precedent): if the current document
     // references the family, its text now renders with the system
     // substitute — warn ONCE per family per session, never silent.
@@ -266,6 +411,7 @@ export const useFontRegistryStore = create<FontRegistryState>((set, get) => ({
     } catch (err) {
       if (import.meta.env.DEV) console.warn('[fonts] failed to remove font files:', err);
     }
+    await removeFromOs(entry.family, Object.keys(entry.files ?? {}));
     set((s) => ({ entries: s.entries.filter((e) => e.id !== id), epoch: s.epoch + 1 }));
     await persistRegistry(get().entries);
   },

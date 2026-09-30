@@ -123,10 +123,19 @@
       "identifier": "fs:allow-remove",
       "allow": [
         {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
           "path": "$APPDATA"
         },
         {
           "path": "$APPDATA/**"
+        },
+        {
+          "path": "$HOME/**"
         }
       ]
     },
@@ -155,6 +164,26 @@
     },
     {
       "identifier": "fs:allow-copy-file",
+      "allow": [
+        {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
       "allow": [
         {
           "path": "$APPCONFIG"
