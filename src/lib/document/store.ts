@@ -6,6 +6,7 @@ import { clearRecoveryCopy } from './recovery';
 import { useConfigStore } from '../config/store';
 import { useStyleRegistryStore } from '../styles/registry';
 import type { PageSetup } from './pageSetup';
+import type { LineNumbersSetting } from './schema';
 
 function defaultPageSetup(): PageSetup {
   const { config } = useConfigStore.getState();
@@ -25,6 +26,11 @@ interface DocumentStore {
   setEditor: (editor: Editor | null) => void;
   markDirty: () => void;
   setPageSetup: (pageSetup: PageSetup) => void;
+  /** M-LINENUMS: the document's gutter setting; null = never set
+   *  (old files) = gutter off. Writing it marks the doc dirty —
+   *  it travels in .wpdoc metadata like pageSetup. */
+  lineNumbers: LineNumbersSetting | null;
+  setLineNumbers: (setting: LineNumbersSetting | null) => void;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
   openFile: () => Promise<void>;
@@ -46,23 +52,25 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setEditor: (editor) => set({ editor }),
   markDirty: () => set((state) => ({ isDirty: true, revision: state.revision + 1 })),
   setPageSetup: (pageSetup) => set({ pageSetup, isDirty: true }),
+  lineNumbers: null,
+  setLineNumbers: (setting) => set((state) => ({ lineNumbers: setting, isDirty: true, revision: state.revision + 1 })),
 
   save: async () => {
-    const { editor, filePath, pageSetup } = get();
+    const { editor, filePath, pageSetup, lineNumbers } = get();
     if (!editor) return;
     if (!filePath) {
       await get().saveAs();
       return;
     }
-    await saveDocument(editor, filePath, pageSetup);
+    await saveDocument(editor, filePath, pageSetup, lineNumbers);
     await clearRecoveryCopy(filePath);
     set({ isDirty: false });
   },
 
   saveAs: async () => {
-    const { editor, filePath: oldPath, pageSetup } = get();
+    const { editor, filePath: oldPath, pageSetup, lineNumbers } = get();
     if (!editor) return;
-    const newPath = await saveDocumentAs(editor, pageSetup);
+    const newPath = await saveDocumentAs(editor, pageSetup, lineNumbers);
     if (newPath) {
       await clearRecoveryCopy(oldPath);
       set({ filePath: newPath, isDirty: false });
@@ -83,6 +91,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           filePath: result.path,
           isDirty: false,
           pageSetup: result.pageSetup ?? defaultPageSetup(),
+          lineNumbers: result.lineNumbers ?? null,
         });
       }
     } catch (err) {

@@ -248,14 +248,14 @@ export const COMMANDS: CommandAction[] = [
     keywords: ['quit', 'exit', 'close', 'shutdown'],
     requiresSafeQuit: true,
     run: async () => {
-      const { editor, filePath, isDirty, pageSetup } = doc();
+      const { editor, filePath, isDirty, pageSetup, lineNumbers } = doc();
       // Safe-quit: dirty doc → recovery snapshot NOW via the EXISTING
       // autosave recovery path (recovery.ts saveRecoveryCopy — same
       // format, same appDataDir()/recovery/ location), so the existing
       // restore flow picks it up. No second snapshot format, no
       // forked restore logic.
       if (editor && isDirty) {
-        await saveRecoveryCopy(editor, filePath, pageSetup);
+        await saveRecoveryCopy(editor, filePath, pageSetup, lineNumbers);
       }
       getCurrentWindow().close();
     },
@@ -325,6 +325,45 @@ export const COMMANDS: CommandAction[] = [
       setShowNonPrintingChars(!config.editor.showNonPrintingChars);
     },
   },
+  {
+    id: 'toggleLineNumbers',
+    title: 'Toggle Line Numbers',
+    icon: List,
+    group: 'navigate',
+    keywords: ['line numbers', 'gutter', 'numbering', 'count', 'lines'],
+    // No enablement predicate by design: toggling is always offered —
+    // it writes the DOCUMENT's setting (marks dirty), not app config.
+    run: () => {
+      const store = useDocumentStore.getState();
+      const current = store.lineNumbers;
+      store.setLineNumbers({
+        enabled: !(current?.enabled ?? false),
+        mode: current?.mode ?? 'per-page',
+        countBy: current?.countBy,
+      });
+    },
+  },
+  // The mode flavors — every one enables with its mode; invoking the
+  // command while ALREADY in that exact state turns the gutter off
+  // (toggle semantics, so the palette alone can fully drive the
+  // setting without the ribbon).
+  ...(['per-page', 'continuous', 'per-paragraph'] as const).map((mode) => ({
+    id: `lineNumbers:${mode}`,
+    title: `Line Numbers: ${mode === 'per-page' ? 'Per Page' : mode === 'per-paragraph' ? 'Per Paragraph' : 'Continuous'}`,
+    icon: ListOrdered,
+    group: 'navigate' as const,
+    keywords: ['line numbers', 'gutter', 'numbering', mode.replace('-', ' '), 'count', 'lines'],
+    run: () => {
+      const store = useDocumentStore.getState();
+      const current = store.lineNumbers;
+      const alreadyActive = current?.enabled === true && current.mode === mode;
+      store.setLineNumbers({
+        enabled: !alreadyActive,
+        mode,
+        countBy: current?.countBy,
+      });
+    },
+  })),
   {
     id: 'zoomIn',
     title: 'Zoom In',

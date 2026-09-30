@@ -1,7 +1,7 @@
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile, rename } from '@tauri-apps/plugin-fs';
 import type { Editor } from '@tiptap/core';
-import { DocumentFileSchema, CURRENT_DOCUMENT_VERSION, type DocumentFile } from './schema';
+import { DocumentFileSchema, CURRENT_DOCUMENT_VERSION, type DocumentFile, type LineNumbersSetting } from './schema';
 import type { PageSetup } from './pageSetup';
 import { useStyleRegistryStore } from '@/lib/styles/registry';
 import type { StyleDefinition } from '@/lib/styles/types';
@@ -14,7 +14,12 @@ async function writeDocumentAtomic(filePath: string, file: DocumentFile): Promis
   await rename(tempPath, filePath);
 }
 
-export async function saveDocument(editor: Editor, filePath: string, pageSetup: PageSetup): Promise<void> {
+export async function saveDocument(
+  editor: Editor,
+  filePath: string,
+  pageSetup: PageSetup,
+  lineNumbers?: LineNumbersSetting | null
+): Promise<void> {
   const file: DocumentFile = {
     version: CURRENT_DOCUMENT_VERSION,
     docJSON: editor.getJSON(),
@@ -25,15 +30,22 @@ export async function saveDocument(editor: Editor, filePath: string, pageSetup: 
       // the file carried (or that were applied to it on open) travel
       // with it; global-layer edits live in styles.json, not here.
       styles: { definitions: useStyleRegistryStore.getState().docLayerForSave() },
+      // M-LINENUMS: absent when never set (old docs / gutter off by
+      // default) — the styles optional-field precedent.
+      ...(lineNumbers ? { lineNumbers } : {}),
     },
   };
   await writeDocumentAtomic(filePath, file);
 }
 
-export async function saveDocumentAs(editor: Editor, pageSetup: PageSetup): Promise<string | null> {
+export async function saveDocumentAs(
+  editor: Editor,
+  pageSetup: PageSetup,
+  lineNumbers?: LineNumbersSetting | null
+): Promise<string | null> {
   const path = await save({ filters: FILE_FILTERS, defaultPath: 'Untitled.wpdoc' });
   if (!path) return null;
-  await saveDocument(editor, path, pageSetup);
+  await saveDocument(editor, path, pageSetup, lineNumbers);
   return path;
 }
 
@@ -41,9 +53,12 @@ export interface OpenDocumentResult {
   path: string;
   pageSetup: PageSetup | null;
   /** M-STYLES: the file's doc-layer style definitions (may be empty —
-   * pre-styles files). The document store applies them to the
-   * registry (doc overrides global by id). */
+   *  pre-styles files). The document store applies them to the
+   *  registry (doc overrides global by id). */
   styleDefinitions: StyleDefinition[];
+  /** M-LINENUMS: the file's gutter setting; null = the file predates
+   *  it or never enabled it. */
+  lineNumbers: LineNumbersSetting | null;
 }
 
 export async function openDocument(editor: Editor): Promise<OpenDocumentResult | null> {
@@ -63,5 +78,6 @@ export async function openDocument(editor: Editor): Promise<OpenDocumentResult |
     path,
     pageSetup: result.data.metadata.pageSetup ?? null,
     styleDefinitions: result.data.metadata.styles?.definitions ?? [],
+    lineNumbers: result.data.metadata.lineNumbers ?? null,
   };
 }

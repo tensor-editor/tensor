@@ -35,6 +35,8 @@ import { ensureBlockIds } from '@/lib/editor/BlockIdExtension';
 import { ensureStyleSync } from '@/lib/styles/styleExtensions';
 import { PageSheet } from './paginated/PageSheet';
 import { BlockCanvas } from './paginated/BlockCanvas';
+import { LineNumberGutter } from './paginated/LineNumberGutter';
+import { countLineNumbers } from '@/lib/paginated/lineNumbers';
 import { SelectionHighlights } from './paginated/SelectionHighlights';
 import { SearchHighlights } from './paginated/SearchHighlights';
 import { FloatingToolbar } from './FloatingToolbar';
@@ -180,6 +182,16 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   );
   const selectionColor = useConfigStore((s) => s.config.editor.selectionColor);
   const setPageInfo = useDocumentStore((s) => s.setPageInfo);
+  // M-LINENUMS: document-level setting; the gutter is a pure
+  // projection of it + LayoutResult (renders nothing when off).
+  const lineNumbers = useDocumentStore((s) => s.lineNumbers);
+  const mergedStyles = useStyleRegistryStore((s) => s.merged);
+  // The gutter speaks the document's baseStyle font (Editor.tsx's
+  // resolveNormalBase spelling of the same idea).
+  const gutterBase = useMemo(
+    () => resolveNormalBase(defaultFontFamily, defaultFontSize, mergedStyles),
+    [defaultFontFamily, defaultFontSize, mergedStyles]
+  );
 
   function computeToolbar(rects: readonly PaintedRect[]): FloatingToolbarPosition | null {
     const stack = stackRef.current;
@@ -839,6 +851,12 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const stackW = pageW;
   const stackH = result.pages.length * pageH + (result.pages.length - 1) * gap;
   const rootRect = rootRef.current?.getBoundingClientRect();
+  // M-LINENUMS: numbers are a pure function of the CURRENT layout —
+  // recomputed every render, so a mid-document edit re-numbers in the
+  // same commit (the no-debounce law; never memoized).
+  const lnNumbers = lineNumbers?.enabled
+    ? countLineNumbers(result.lines, lineNumbers.mode, lineNumbers.countBy ?? 1)
+    : null;
 
   return (
     <div className="relative" data-testid="paginated-root" ref={rootRef}>
@@ -909,6 +927,24 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                       />
                     );
                   })}
+                {lnNumbers &&
+                  (() => {
+                    const entries: { line: (typeof result.lines)[number]; number: number }[] = [];
+                    for (let i = 0; i < result.lines.length; i++) {
+                      const line = result.lines[i]!;
+                      if (line.pageIndex !== page.index) continue;
+                      const number = lnNumbers[i]!;
+                      if (number != null) entries.push({ line, number });
+                    }
+                    return entries.length > 0 ? (
+                      <LineNumberGutter
+                        contentBox={page.contentBox}
+                        entries={entries}
+                        fontFamily={gutterBase.fontFamily}
+                        fontSize={gutterBase.fontSize}
+                      />
+                    ) : null;
+                  })()}
               </PageSheet>
             );
           })}

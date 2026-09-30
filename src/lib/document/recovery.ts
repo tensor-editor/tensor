@@ -1,7 +1,7 @@
 import { writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { appDataDir, join } from '@tauri-apps/api/path';
 import type { Editor } from '@tiptap/core';
-import { CURRENT_DOCUMENT_VERSION, type DocumentFile } from './schema';
+import { CURRENT_DOCUMENT_VERSION, type DocumentFile, type LineNumbersSetting } from './schema';
 import type { PageSetup } from './pageSetup';
 
 // Stable per-app-launch id, used for recovery files of never-yet-saved
@@ -30,7 +30,8 @@ async function getRecoveryPath(originalPath: string | null): Promise<string> {
 export async function saveRecoveryCopy(
   editor: Editor,
   originalPath: string | null,
-  pageSetup: PageSetup
+  pageSetup: PageSetup,
+  lineNumbers?: LineNumbersSetting | null
 ): Promise<void> {
   try {
     const file: DocumentFile = {
@@ -40,6 +41,7 @@ export async function saveRecoveryCopy(
         modifiedAt: new Date().toISOString(),
         originalPath: originalPath ?? undefined,
         pageSetup,
+        ...(lineNumbers ? { lineNumbers } : {}),
       },
     };
     const path = await getRecoveryPath(originalPath);
