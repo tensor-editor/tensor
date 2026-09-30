@@ -31,6 +31,21 @@ const DocStylesSchema = z.object({
   definitions: z.array(StyleDefinitionSchema).default([]),
 });
 
+/**
+ * M-LINENUMS: the document's line-number gutter setting. Optional —
+ * old files predate it and open with the gutter off (the styles
+ * precedent). countBy is metadata-only in v1 (no ribbon UI): the
+ * counter advances on every line; a number is SHOWN only when
+ * (n−1) % countBy === 0, else the line renders blank.
+ */
+export const LineNumbersSchema = z.object({
+  enabled: z.boolean(),
+  mode: z.enum(['continuous', 'per-page', 'per-paragraph']),
+  countBy: z.number().int().min(1).optional(),
+});
+
+export type LineNumbersSetting = z.infer<typeof LineNumbersSchema>;
+
 export const DocumentFileSchema = z.object({
   version: z.number(),
   docJSON: z.any(),
@@ -41,6 +56,7 @@ export const DocumentFileSchema = z.object({
     originalPath: z.string().optional(),
     pageSetup: PageSetupSchema.optional(),
     styles: DocStylesSchema.optional(),
+    lineNumbers: LineNumbersSchema.optional(),
   }).default({}),
 });
 
