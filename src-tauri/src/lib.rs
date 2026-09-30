@@ -68,7 +68,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu-event", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![fetch_link_metadata])
+        .invoke_handler(tauri::generate_handler![fetch_link_metadata, fetch_url])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -130,4 +130,18 @@ async fn fetch_link_metadata(url: String) -> Result<LinkMetadata, String> {
         description,
         favicon,
     })
+}
+
+#[tauri::command]
+async fn fetch_url(url: String, ua: Option<String>) -> Result<tauri::ipc::Response, String> {
+    let mut builder = reqwest::Client::builder()
+        .user_agent(ua.unwrap_or_else(|| "Mozilla/5.0 (compatible; TensorEditor/1.0)".to_string()));
+    let client = builder.build().map_err(|e| e.to_string())?;
+
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes.to_vec()))
 }

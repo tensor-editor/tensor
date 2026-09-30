@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Link2, RefreshCw } from 'lucide-react';
+import { Link2, RefreshCw, Type } from 'lucide-react';
 import { useConfigStore } from '@/lib/config/store';
 import { Switch } from '@/components/ui/switch';
 import { IconButton } from '@/components/layout/IconButton';
@@ -8,6 +8,7 @@ import type { SettingsSectionDefinition } from '@/lib/settings/types';
 
 export const PRIVACY_PANEL_SECTIONS: SettingsSectionDefinition[] = [
   { id: 'link-previews', label: 'Link Previews' },
+  { id: 'fonts', label: 'Fonts' },
   { id: 'updates', label: 'Updates' },
 ];
 
@@ -31,6 +32,8 @@ export function PrivacyPanel() {
   const setFetchLinkMetadata = useConfigStore((s) => s.setFetchLinkMetadata);
   const autoCheckForUpdates = useConfigStore((s) => s.config.privacy.autoCheckForUpdates);
   const setAutoCheckForUpdates = useConfigStore((s) => s.setAutoCheckForUpdates);
+  const allowFontCatalogs = useConfigStore((s) => s.config.privacy.allowFontCatalogs);
+  const setAllowFontCatalogs = useConfigStore((s) => s.setAllowFontCatalogs);
 
   return (
     <div className="flex flex-col">
@@ -41,6 +44,20 @@ export function PrivacyPanel() {
           description="When inserting a hyperlink, fetch the page's title/favicon from the internet to show a live preview. Disabling this means links are never followed until you click them."
         >
           <Switch checked={fetchLinkMetadata} onCheckedChange={setFetchLinkMetadata} />
+        </Row>
+      </SettingsSection>
+
+      <SettingsSection id="fonts" title="Fonts">
+        <Row
+          icon={<Type className="h-4 w-4" />}
+          label="Allow browsing online font catalogs"
+          description="Enables network requests to Google Fonts / Font Share when you search. No browsing ships yet — this only saves your preference for when it does (milestone B)."
+        >
+          <Switch
+            checked={allowFontCatalogs}
+            onCheckedChange={setAllowFontCatalogs}
+            data-testid="allow-font-catalogs-switch"
+          />
         </Row>
       </SettingsSection>
 

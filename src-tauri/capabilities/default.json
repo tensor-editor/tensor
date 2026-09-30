@@ -10,7 +10,14 @@
     "opener:default",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+      "allow": [
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-read-text-file",
@@ -116,15 +123,84 @@
       "identifier": "fs:allow-remove",
       "allow": [
         {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
           "path": "$APPDATA"
         },
         {
           "path": "$APPDATA/**"
+        },
+        {
+          "path": "$HOME/**"
         }
       ]
     },
     "dialog:default",
     "clipboard-manager:allow-read-text",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-copy-file",
+      "allow": [
+        {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    }
   ]
 }

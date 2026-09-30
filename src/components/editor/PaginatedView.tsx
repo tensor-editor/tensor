@@ -37,6 +37,7 @@ import { PageSheet } from './paginated/PageSheet';
 import { BlockCanvas } from './paginated/BlockCanvas';
 import { LineNumberGutter } from './paginated/LineNumberGutter';
 import { countLineNumbers } from '@/lib/paginated/lineNumbers';
+import { useFontRegistryStore } from '@/lib/fonts/registry';
 import { SelectionHighlights } from './paginated/SelectionHighlights';
 import { SearchHighlights } from './paginated/SearchHighlights';
 import { FloatingToolbar } from './FloatingToolbar';
@@ -185,6 +186,8 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   // M-LINENUMS: document-level setting; the gutter is a pure
   // projection of it + LayoutResult (renders nothing when off).
   const lineNumbers = useDocumentStore((s) => s.lineNumbers);
+  // M-FONTS: install/uninstall epoch — see the font-epoch effect.
+  const fontEpoch = useFontRegistryStore((s) => s.epoch);
   const mergedStyles = useStyleRegistryStore((s) => s.merged);
   // The gutter speaks the document's baseStyle font (Editor.tsx's
   // resolveNormalBase spelling of the same idea).
@@ -616,6 +619,51 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   useEffect(() => {
     relayoutRef.current();
   }, [pageSetup, defaultFontFamily, defaultFontSize, styleEpoch]);
+
+  // M-FONTS: a font install/uninstall changes the RULER mid-session.
+  // The font registry's epoch bump means a FontFace was registered or
+  // removed — visible docs must re-measure NOW (live, not
+  // next-launch). Two things happen, in order:
+  const firstFontEpochRun = useRef(true);
+  useEffect(() => {
+    // Mount run is a no-op: at cold-boot the engine is fresh anyway
+    // (a relaunch's loadFromDisk re-registrations land before the
+    // first measure — the gate covers them). Only LATER bumps (an
+    // install/uninstall during this session) take the recreate path.
+    if (firstFontEpochRun.current) {
+      firstFontEpochRun.current = false;
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      // 1. RE-GATE: every registered face is loaded before any
+      //    measure — the M5.6 law, now also the re-gate (fonts
+      //    re-gate before first layout after any install).
+      if (typeof document !== 'undefined' && document.fonts) {
+        await document.fonts.ready;
+      }
+      if (cancelled) return;
+      // 2. ENGINE RECREATE — the stale-cache remedy. The engine
+      //    drops its line caches only when opts/baseStyle HASHES
+      //    change (engine layout.ts); a doc that referenced 'MyFont'
+      //    BEFORE the font existed measured fallback widths, and the
+      //    strings are identical pre/post install — so a plain
+      //    relayout would re-serve those fallback-width LineBoxes
+      //    forever. Recreating the engine starts the cache cold.
+      //    WHY ADAPTER REUSE IS SAFE: the pairing law (metrics.ts)
+      //    forbids a WARM metrics paired with a CACHED engine — the
+      //    reverse (a warm ruler with a COLD cache) is exactly the
+      //    legal direction. The adapter's Blocks/runs are unchanged
+      //    by a font install (only the ruler changed), so reusing
+      //    them is legal; the fresh engine re-measures them with the
+      //    now-real font.
+      engineRef.current = createLayoutEngine({ metrics: metricsRef.current! });
+      relayoutRef.current();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fontEpoch]);
 
   // One IntersectionObserver over all sheets. Visible
   // (±1 buffer) pages mount canvases; the sheet with the highest

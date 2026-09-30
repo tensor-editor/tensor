@@ -18,6 +18,7 @@ import {
   IndentIncrease,
   Info,
   Italic,
+  Library,
   Link2,
   List,
   ListOrdered,
@@ -52,6 +53,7 @@ import { useConfigStore } from '@/lib/config/store';
 import { useSettingsDialogStore } from '@/lib/settings/store';
 import { usePaletteStore } from '@/lib/palette/store';
 import { useStyleDialogStore } from '@/lib/styles/dialogStore';
+import { useFontBrowserStore } from '@/lib/fonts/browserStore';
 
 /**
  * M-PALETTE. The declarative app command registry — the single source
@@ -270,6 +272,14 @@ export const COMMANDS: CommandAction[] = [
     shortcutId: 'openSettings',
     keywords: ['settings', 'preferences', 'options', 'config', 'configure'],
     run: () => useSettingsDialogStore.getState().open(),
+  },
+  {
+    id: 'browseFonts',
+    title: 'Browse Fonts',
+    icon: Library,
+    group: 'actions',
+    keywords: ['fonts', 'font family', 'install', 'upload', 'typeface', 'browse'],
+    run: () => useFontBrowserStore.getState().open(),
   },
   {
     id: 'createStyle',
