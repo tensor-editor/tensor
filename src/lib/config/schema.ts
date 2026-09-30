@@ -52,9 +52,15 @@ export const ConfigSchema = z.object({
   privacy: z.object({
     autoCheckForUpdates: z.boolean().default(false),
     fetchLinkMetadata: z.boolean().default(true),
+    /** M-FONTS-A: gate for milestone B's online catalog browsing
+     *  (Google Fonts / Font Share). Inert until B ships — default OFF,
+     *  no network code reads it yet; saving the preference is all it
+     *  does today. */
+    allowFontCatalogs: z.boolean().default(false),
   }).default({
     autoCheckForUpdates: false,
-    fetchLinkMetadata: true
+    fetchLinkMetadata: true,
+    allowFontCatalogs: false,
   }),
   accessibility: z.object({
     reduceMotion: z.enum(['system', 'on', 'off']).default('system'),

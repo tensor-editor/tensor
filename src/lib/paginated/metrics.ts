@@ -20,12 +20,21 @@ import type { TextMetrics, TextStyle } from '@tensor-editor/engine';
  */
 
 /** THE one font-string builder — RealMetrics measures with it and the
- * track painter sets ctx.font from it, so measured widths and painted
- * advances can never diverge. Style/weight/size/family, full TextStyle.
- * fontVariant is deliberately NOT in the string: it is a separate
- * canvas property (fontVariantCaps) applied by applyVariantCaps, and
- * it participates in every measurement cache key — small-cap glyphs
- * measure narrower than full caps, so a variant edit must re-measure. */
+ *  track painter sets ctx.font from it, so measured widths and painted
+ *  advances can never diverge. Style/weight/size/family, full TextStyle.
+ *  fontVariant is deliberately NOT in the string: it is a separate
+ *  canvas property (fontVariantCaps) applied by applyVariantCaps, and
+ *  it participates in every measurement cache key — small-cap glyphs
+ *  measure narrower than full caps, so a variant edit must re-measure.
+ *
+ *  THE TWO WORLDS (M-FONTS): STATIC fonts resolve '700' to a REAL
+ *  registered bold FILE (a Fontsource 700.css face, or an uploaded
+ *  entry's bold file) — never a synthetic bold; VARIABLE fonts (the
+ *  Geist Variable precedent, entry.variable) have no bold file: the
+ *  axis is weighted at this same string, so measurement and paint stay
+ *  one ruler in both worlds. The registry guarantees the claim: an
+ *  entry that names a bold file must resolve `document.fonts.load`
+ *  with a real face (the no-synthetic receipts in fonts.test.tsx). */
 export function fontString(style: TextStyle): string {
   return `${style.italic ? 'italic ' : ''}${style.bold ? '700 ' : ''}${style.fontSize}px ${style.fontFamily}`;
 }

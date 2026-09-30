@@ -8,6 +8,7 @@ import { MarginsDialog } from './components/dialogs/MarginsDialog';
 import { DocumentStatisticsDialog } from './components/dialogs/DocumentStatisticsDialog';
 import { CustomPageSizeDialog } from './components/dialogs/CustomPageSizeDialog';
 import { StyleDialog } from './components/dialogs/StyleDialog';
+import { FontBrowserDialog } from './components/dialogs/FontBrowserDialog';
 import { CommandPalette } from './components/palette/CommandPalette';
 import { useConfigStore } from './lib/config/store';
 import { useConfigPersistence } from './lib/config/useConfigPersistence';
@@ -16,6 +17,7 @@ import { useAppShortcuts } from './lib/shortcuts/useAppShortcuts';
 import { useAutosave } from './lib/document/useAutosave';
 import { useMenuEvents } from './lib/menu/useMenuEvents';
 import { useStyleRegistryStore } from './lib/styles/registry';
+import { useFontRegistryStore } from './lib/fonts/registry';
 import { useStyleDialogStore } from './lib/styles/dialogStore';
 import { StatusBar } from './components/layout/StatusBar';
 import { Ribbon } from './components/layout/Ribbon';
@@ -32,6 +34,13 @@ function App() {
   // file (hyperlink custom, builtins.ts). Doc layers apply on open.
   useEffect(() => {
     void useStyleRegistryStore.getState().loadGlobal();
+  }, []);
+
+  // M-FONTS-A: re-register uploaded fonts from appDataDir()/fonts/
+  // once at bootstrap (fonts.json is the entry list) — before the
+  // paginated view's font gate settles its first layout.
+  useEffect(() => {
+    void useFontRegistryStore.getState().loadFromDisk();
   }, []);
 
   // Differential benchmark. Triggers: URL #bench/?bench, OR five
@@ -134,6 +143,7 @@ function App() {
       <SettingsDialog />
       <CommandPalette />
       <StyleDialog state={styleDialog} onClose={styleDialog.close} />
+      <FontBrowserDialog />
       <DocumentPropertiesDialog />
       <DocumentStatisticsDialog />
       <CustomPageSizeDialog />

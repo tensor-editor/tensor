@@ -5,11 +5,13 @@ import {
   Underline as UnderlineIcon,
   Strikethrough,
   Highlighter,
+  Library,
 } from "lucide-react";
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -19,6 +21,8 @@ import { useDocumentStore } from "@/lib/document/store";
 import { FontSizeInput } from "../FontSizeInput";
 import { useConfigStore } from "@/lib/config/store";
 import { useStyleRegistryStore } from "@/lib/styles/registry";
+import { useFontRegistryStore, warnFontUnavailable } from "@/lib/fonts/registry";
+import { useFontBrowserStore } from "@/lib/fonts/browserStore";
 import {
   effectiveSelectionRunStyle,
   selectionBaseline,
@@ -26,14 +30,9 @@ import {
 import { ColorPickerButton } from "../../ColorPickerButton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-const FONT_FAMILIES = [
-  "Arial",
-  "Georgia",
-  "Times New Roman",
-  "Courier New",
-  "Verdana",
-  "system-ui",
-];
+/** Sentinel value for the in-list Browse action — never a real
+ *  family, so it can never collide with a font name. */
+const BROWSE_FONTS_VALUE = '__browse_fonts__';
 
 export function FontGroup() {
   const editor = useDocumentStore((s) => s.editor);
@@ -41,6 +40,12 @@ export function FontGroup() {
   const defaultFontSize = useConfigStore((s) => s.config.editor.defaultFontSize);
   const defaultFontFamily = useConfigStore((s) => s.config.editor.defaultFontFamily);
   const mergedStyles = useStyleRegistryStore((s) => s.merged);
+
+  // M-FONTS-A: the picker's data source is the font registry —
+  // bundled + uploaded (catalog families join in milestone B).
+  const fontEntries = useFontRegistryStore((s) => s.entries);
+  const fontFamilies = fontEntries.map((e) => e.family);
+  const openFontBrowser = useFontBrowserStore((s) => s.open);
 
   const attrs = useEditorState({
     editor,
@@ -74,6 +79,13 @@ export function FontGroup() {
 
   if (!editor) return null;
 
+  // The warned-set site for missing families (styles precedent): a
+  // document referencing an unregistered family renders substituted —
+  // warn ONCE per family per session, never silent, never spammy.
+  if (attrs?.effectiveFontFamily && !fontFamilies.includes(attrs.effectiveFontFamily)) {
+    warnFontUnavailable(attrs.effectiveFontFamily);
+  }
+
   return (
     <RibbonGroup>
       <Tooltip>
@@ -81,13 +93,25 @@ export function FontGroup() {
           render={
             <Select
               value={attrs?.effectiveFontFamily || ''}
-              onValueChange={(value) => value && editor.chain().focus().setFontFamily(value).run()}
+              onValueChange={(value) => {
+                if (value === BROWSE_FONTS_VALUE) {
+                  openFontBrowser();
+                  return;
+                }
+                if (value) editor.chain().focus().setFontFamily(value).run();
+              }}
             >
               <Tooltip>
                 <TooltipTrigger
                   render={
                     <SelectTrigger className="mx-1.5 h-8 w-32 text-sm">
-                      <SelectValue placeholder="Font" />
+                      {/* Explicit children: the label is EXACTLY the
+                          live effective family (or the placeholder) —
+                          never a resolved-from-DOM label, which can
+                          render a stale item map on cold popups. */}
+                      <SelectValue placeholder="Font">
+                        {attrs?.effectiveFontFamily || undefined}
+                      </SelectValue>
                     </SelectTrigger>
                   }
                 />
@@ -96,11 +120,24 @@ export function FontGroup() {
               <SelectContent
                 alignItemWithTrigger={false}
                 >
-                {FONT_FAMILIES.map((font) => (
+                {fontFamilies.map((font) => (
                   <SelectItem key={font} value={font} style={{ fontFamily: font }}>
                     {font}
                   </SelectItem>
                 ))}
+                <SelectSeparator />
+                {/* The browse action lives IN the list (VSCode's
+                    "Browse…" precedent) instead of a separate ribbon
+                    button. Selecting it opens the Font Browser; the
+                    value prop stays the effective family, so the
+                    trigger never shows it. */}
+                <SelectItem
+                  value={BROWSE_FONTS_VALUE}
+                  className="text-muted-foreground"
+                  data-testid="font-picker-browse"
+                >
+                  <Library size={12} /> Browse Fonts…
+                </SelectItem>
               </SelectContent>
             </Select>
           }

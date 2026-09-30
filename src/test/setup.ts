@@ -118,3 +118,79 @@ if (typeof (globalThis as { ResizeObserver?: unknown }).ResizeObserver === 'unde
 if (typeof (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView === 'undefined') {
   (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView = () => {};
 }
+
+// jsdom ships no CSS Font Loading API — no document.fonts, no FontFace
+// global. M-FONTS-A registers faces against that API; these stubs give
+// the registry's REAL code path an honest recording surface for tests:
+// added faces are tracked (globally readable via __fontFaces), and
+// load("<weight> <size>px <family>") resolves the faces registered for
+// that family — the bold-resolution receipts ride it. No glyph
+// rasterization happens here (jsdom has none); geometry comes from the
+// injected metrics seam as always.
+class FontFaceStub {
+  static instances: FontFaceStub[] = [];
+  family: string;
+  descriptors: { weight?: string; style?: string };
+  status: 'unloaded' | 'loaded' | 'error' = 'unloaded';
+  constructor(
+    family: string,
+    _source: ArrayBuffer | string,
+    descriptors: { weight?: string; style?: string } = {},
+  ) {
+    this.family = family;
+    this.descriptors = descriptors;
+    FontFaceStub.instances.push(this);
+  }
+  load() {
+    this.status = 'loaded';
+    return Promise.resolve(this);
+  }
+}
+(globalThis as { FontFace?: unknown }).FontFace = FontFaceStub;
+(globalThis as { __fontFaces?: typeof FontFaceStub }).__fontFaces = FontFaceStub;
+
+class FontFaceSetStub {
+  private faces: FontFaceStub[] = [];
+  add(face: FontFaceStub) {
+    if (!this.faces.includes(face)) this.faces.push(face);
+  }
+  delete(face: FontFaceStub) {
+    const i = this.faces.indexOf(face);
+    if (i >= 0) this.faces.splice(i, 1);
+  }
+  has(face: FontFaceStub) {
+    return this.faces.includes(face);
+  }
+  get size() {
+    return this.faces.length;
+  }
+  *[Symbol.iterator]() {
+    yield* this.faces;
+  }
+  check() {
+    return true;
+  }
+  /** "<italic?> <weight?> <size>px <family>" → faces whose registered
+   *  descriptors satisfy the request (the bold-resolution receipts:
+   *  an entry claiming bold must resolve '700 …' from its OWN bold
+   *  face — a regular-only family must NOT). Variable-style stubs are
+   *  out of scope; the app-world axis story lives in fontString's
+   *  comment. */
+  async load(font: string) {
+    const m = /(\d+)px\s+(.+)$/.exec(font);
+    if (!m) return [];
+    const wantsItalic = /^\s*italic\b/.test(font);
+    const weightMatch = /(\d{3})\s/.exec(font);
+    const wantsWeight = weightMatch ? weightMatch[1]! : '400';
+    return this.faces.filter(
+      (f) =>
+        f.family === m![2] &&
+        (f.descriptors.weight === wantsWeight || f.descriptors.weight === undefined) &&
+        (wantsItalic ? f.descriptors.style === 'italic' : true),
+    );
+  }
+  get ready() {
+    return Promise.resolve(this);
+  }
+}
+Object.defineProperty(document, 'fonts', { value: new FontFaceSetStub(), configurable: true });

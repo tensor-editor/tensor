@@ -30,6 +30,7 @@ interface ConfigStore {
 
   setFetchLinkMetadata: (value: boolean) => void;
   setAutoCheckForUpdates: (value: boolean) => void;
+  setAllowFontCatalogs: (value: boolean) => void;
 
   loadConfig: (raw: unknown) => void;
 }
@@ -194,4 +195,12 @@ export const useConfigStore = create<ConfigStore>((set) => ({
       set({ config: DEFAULT_CONFIG });
     }
   },
+
+  setAllowFontCatalogs: (value) =>
+    set((state) => ({
+      config: {
+        ...state.config,
+        privacy: { ...state.config.privacy, allowFontCatalogs: value },
+      },
+    })),
 }));

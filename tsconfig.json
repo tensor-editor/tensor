@@ -5,6 +5,10 @@
     "lib": ["ES2020", "DOM"],
     "module": "ESNext",
     "skipLibCheck": true,
+    /* Node types for the fs receipts test (M-FONTS-A) — the vitest
+       suite runs under node; explicitly opted in rather than relying
+       on @types auto-discovery. */
+    "types": ["node", "vite/client"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
