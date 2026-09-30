@@ -23,6 +23,19 @@ import { writeTextFile } from '@tauri-apps/plugin-fs';
 
 // ─── Tauri surface mocks (fs/path/window — quit & recovery paths) ────────
 
+// M-IMAGES-0: the .wpdoc v2 container simulator (recovery snapshots
+// package through package_document now).
+const wpdocFiles = vi.hoisted(() => new Map<string, { kind: 'v2'; document: string; media: unknown[] }>());
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(async (cmd: string, args: { path?: string; documentJson?: string; media?: unknown[] }) => {
+    if (cmd === 'package_document') {
+      wpdocFiles.set(args.path!, { kind: 'v2', document: args.documentJson!, media: args.media ?? [] });
+      return null;
+    }
+    throw new Error(`unexpected command: ${cmd}`);
+  }),
+}));
+
 vi.mock('@tauri-apps/plugin-fs', () => ({
   writeTextFile: vi.fn(async () => {}),
   exists: vi.fn(async () => false),
@@ -480,19 +493,21 @@ describe('safe quit (requiresSafeQuit)', () => {
     });
 
     expect(windowMocks.close).toHaveBeenCalledTimes(1);
-    expect(writeTextFile).toHaveBeenCalledTimes(1);
-    // Same path + format as the autosave recovery (recovery.ts law):
-    const [path, contents] = (writeTextFile as ReturnType<typeof vi.fn>).mock.calls[0] as [
-      string,
-      string,
-    ];
-    expect(path).toMatch(/^\/appdata\/recovery\/[\w-]+\.wpdoc$/);
-    const file = JSON.parse(contents);
+    // M-IMAGES-0: snapshots are v2 CONTAINERS now — one
+    // package_document command at the recovery path (recovery.ts law
+    // unchanged otherwise):
+    const { invoke } = await import('@tauri-apps/api/core');
+    const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
+    const packageCalls = invokeMock.mock.calls.filter(([cmd]) => cmd === 'package_document');
+    expect(packageCalls).toHaveLength(1);
+    const args = packageCalls[0]![1] as { path: string; documentJson: string; media: unknown[] };
+    expect(args.path).toMatch(/^\/appdata\/recovery\/[\w-]+\.wpdoc$/);
+    const file = JSON.parse(args.documentJson);
     expect(file.version).toBeTypeOf('number');
     expect(file.docJSON).toEqual(editor.getJSON());
     expect(file.metadata.originalPath).toBeUndefined();
     // Order: snapshot BEFORE close, never after.
-    expect((writeTextFile as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(invokeMock.mock.invocationCallOrder[0]).toBeLessThan(
       windowMocks.close.mock.invocationCallOrder[0],
     );
   });

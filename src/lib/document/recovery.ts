@@ -1,8 +1,9 @@
-import { writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { appDataDir, join } from '@tauri-apps/api/path';
 import type { Editor } from '@tiptap/core';
 import { CURRENT_DOCUMENT_VERSION, type DocumentFile, type LineNumbersSetting } from './schema';
 import type { PageSetup } from './pageSetup';
+import { collectReferencedMediaIds, openWpdoc, saveWpdoc } from './wpdoc';
 
 // Stable per-app-launch id, used for recovery files of never-yet-saved
 // documents (no real filePath to derive an identity from).
@@ -44,12 +45,29 @@ export async function saveRecoveryCopy(
         ...(lineNumbers ? { lineNumbers } : {}),
       },
     };
+    // M-IMAGES-0: snapshots are v2 containers now — the SAME
+    // package command as saves (media rides along, GC'd to the
+    // document's references). The path is unchanged.
     const path = await getRecoveryPath(originalPath);
-    await writeTextFile(path, JSON.stringify(file, null, 2));
+    await saveWpdoc(path, file);
   } catch (err) {
     console.error('Autosave failed:', err);
   }
 }
+
+/**
+ * M-IMAGES-0: open a recovery snapshot — v2 container, or an OLD
+ * (v1 JSON) snapshot via the same permanent converter as
+ * openDocument. Restore flows read through this; the formats can
+ * never fork.
+ */
+export async function readRecoveryCopy(path: string): Promise<DocumentFile> {
+  return openWpdoc(path);
+}
+
+/** Test seam: the GC scan lives in wpdoc.ts; re-exported for the
+ * recovery tests' byte-level assertions. */
+export { collectReferencedMediaIds };
 
 export async function clearRecoveryCopy(originalPath: string | null): Promise<void> {
   try {

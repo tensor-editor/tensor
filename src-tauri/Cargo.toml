@@ -23,6 +23,8 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-http = "2"
 reqwest = { version = "0.12", features = ["json"] }
 scraper = "0.20"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+base64 = "0.22"
 
 [profile.release]
 codegen-units = 1

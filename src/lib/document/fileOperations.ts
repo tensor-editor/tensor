@@ -1,19 +1,19 @@
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile, rename } from '@tauri-apps/plugin-fs';
 import type { Editor } from '@tiptap/core';
-import { DocumentFileSchema, CURRENT_DOCUMENT_VERSION, type DocumentFile, type LineNumbersSetting } from './schema';
+import { CURRENT_DOCUMENT_VERSION, type DocumentFile, type LineNumbersSetting } from './schema';
 import type { PageSetup } from './pageSetup';
 import { useStyleRegistryStore } from '@/lib/styles/registry';
 import type { StyleDefinition } from '@/lib/styles/types';
+import { openWpdoc, saveWpdoc } from './wpdoc';
 
 const FILE_FILTERS = [{ name: 'Word Processor Document', extensions: ['wpdoc'] }];
 
-async function writeDocumentAtomic(filePath: string, file: DocumentFile): Promise<void> {
-  const tempPath = `${filePath}.tmp`;
-  await writeTextFile(tempPath, JSON.stringify(file, null, 2));
-  await rename(tempPath, filePath);
-}
-
+/**
+ * M-IMAGES-0: .wpdoc v2 — saves write the zip container (the Rust
+ * package_document command; ATOMIC temp+rename lives Rust-side now,
+ * the old writeDocumentAtomic pattern moved with it). The media set
+ * packaged is the document's REFERENCED media only (saveWpdoc's GC).
+ */
 export async function saveDocument(
   editor: Editor,
   filePath: string,
@@ -35,7 +35,7 @@ export async function saveDocument(
       ...(lineNumbers ? { lineNumbers } : {}),
     },
   };
-  await writeDocumentAtomic(filePath, file);
+  await saveWpdoc(filePath, file);
 }
 
 export async function saveDocumentAs(
@@ -65,19 +65,18 @@ export async function openDocument(editor: Editor): Promise<OpenDocumentResult |
   const path = await open({ filters: FILE_FILTERS, multiple: false });
   if (!path || Array.isArray(path)) return null;
 
-  const raw = await readTextFile(path);
-  const parsed = JSON.parse(raw);
-  const result = DocumentFileSchema.safeParse(parsed);
+  // M-IMAGES-0: v2 container — or v1 plain JSON via the PERMANENT
+  // converter (openWpdoc detects the NOT_ZIP marker). Corrupted files
+  // throw here; the store's open path surfaces the LOUD error dialog
+  // (never a crash, never silent loss — the corrupted→defaults
+  // posture's document-side spelling).
+  const file = await openWpdoc(path);
 
-  if (!result.success) {
-    throw new Error('This file is not a valid document, or was saved by an incompatible version.');
-  }
-
-  editor.commands.setContent(result.data.docJSON);
+  editor.commands.setContent(file.docJSON);
   return {
     path,
-    pageSetup: result.data.metadata.pageSetup ?? null,
-    styleDefinitions: result.data.metadata.styles?.definitions ?? [],
-    lineNumbers: result.data.metadata.lineNumbers ?? null,
+    pageSetup: file.metadata.pageSetup ?? null,
+    styleDefinitions: file.metadata.styles?.definitions ?? [],
+    lineNumbers: file.metadata.lineNumbers ?? null,
   };
 }

@@ -13,9 +13,32 @@ import { renderTensor, renderTensorInScrollContainer, GEOMETRY, settleLayout } f
 
 // ─── Tauri surface mocks (file operations round-trip) ─────────────────────
 
+// M-IMAGES-0: the .wpdoc v2 container simulator — mirrors the Rust
+// wire contract (package stores; unpackage returns v2, throws the
+// NOT_ZIP marker for v1, a generic error for corrupted archives).
+const wpdocFiles = vi.hoisted(() => new Map<string, { kind: 'v2'; document: string; media: unknown[] } | { kind: 'v1'; raw: string }>());
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(async (cmd: string, args: { path?: string; documentJson?: string; media?: unknown[]; url?: string }) => {
+    if (cmd === 'package_document') {
+      wpdocFiles.set(args.path!, { kind: 'v2', document: args.documentJson!, media: args.media ?? [] });
+      return null;
+    }
+    if (cmd === 'unpackage_document') {
+      const file = wpdocFiles.get(args.path!);
+      if (!file) throw new Error('file not found');
+      if (file.kind === 'v1') throw new Error('NOT_ZIP: not a v2 container (v1 plain-JSON file?)');
+      return { document: file.document, media: file.media };
+    }
+    throw new Error(`unexpected command: ${cmd}`);
+  }),
+}));
+
 vi.mock('@tauri-apps/plugin-fs', () => ({
-  writeTextFile: vi.fn(async () => {}),
-  readTextFile: vi.fn(async () => '{}'),
+  readTextFile: vi.fn(async (path: string) => {
+    const f = wpdocFiles.get(path);
+    if (f?.kind === 'v1') return f.raw; // the converter's read source
+    return '{}';
+  }),
   rename: vi.fn(async () => {}),
 }));
 
@@ -25,7 +48,6 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: vi.fn(async () => null),
 }));
 
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { saveDocument, openDocument } from '@/lib/document/fileOperations';
 
 const CB = GEOMETRY.contentX; // 96 — the left margin, where the gutter lives
@@ -305,37 +327,43 @@ describe('persistence (.wpdoc metadata, styles precedent)', () => {
     expect(old.metadata.lineNumbers).toBeUndefined();
   });
 
-  it('saveDocument writes the setting; a null setting is omitted (old-doc shape)', async () => {
+  it('saveDocument writes the setting into the v2 container; a null setting is omitted', async () => {
     const { editor } = renderTensor('<p>hello</p>');
     await saveDocument(editor, '/x/a.wpdoc', useDocumentStore.getState().pageSetup, {
       enabled: true,
       mode: 'per-page',
     });
-    const written = JSON.parse((writeTextFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string);
+    // v2: the setting rides in the packaged container's document.json.
+    const written = JSON.parse((wpdocFiles.get('/x/a.wpdoc') as { document: string }).document);
     expect(written.metadata.lineNumbers).toEqual({ enabled: true, mode: 'per-page' });
 
-    vi.clearAllMocks();
+    wpdocFiles.clear();
     await saveDocument(editor, '/x/a.wpdoc', useDocumentStore.getState().pageSetup, null);
-    const clean = JSON.parse((writeTextFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string);
+    const clean = JSON.parse((wpdocFiles.get('/x/a.wpdoc') as { document: string }).document);
     expect(clean.metadata.lineNumbers).toBeUndefined();
   });
 
   it('openDocument returns the setting (and null for old files)', async () => {
     const { editor } = renderTensor('<p>hello</p>');
     dialogMocks.openPath = '/x/a.wpdoc';
-    (readTextFile as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      JSON.stringify({
+    // The file is a v1 plain JSON (the converter path — old-file
+    // reads are v1 by construction now):
+    wpdocFiles.set('/x/a.wpdoc', {
+      kind: 'v1',
+      raw: JSON.stringify({
         version: CURRENT_DOCUMENT_VERSION,
         docJSON: { type: 'doc', content: [] },
         metadata: { lineNumbers: { enabled: true, mode: 'continuous' } },
       }),
-    );
+    });
     const result = await openDocument(editor);
     expect(result!.lineNumbers).toEqual({ enabled: true, mode: 'continuous' });
 
-    (readTextFile as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      JSON.stringify({ version: CURRENT_DOCUMENT_VERSION, docJSON: {}, metadata: {} }),
-    );
+    // The pre-linenumbers v1 file: absent → null.
+    wpdocFiles.set('/x/a.wpdoc', {
+      kind: 'v1',
+      raw: JSON.stringify({ version: CURRENT_DOCUMENT_VERSION, docJSON: {}, metadata: {} }),
+    });
     const old = await openDocument(editor);
     expect(old!.lineNumbers).toBeNull();
   });

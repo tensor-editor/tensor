@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "docJSON": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "attrs": {
+          "textAlign": null,
+          "blockId": "v1fix-para-0001",
+          "lineHeight": null,
+          "indent": 0,
+          "indentLeft": 0,
+          "indentRight": 0,
+          "firstLineIndent": null,
+          "spaceBefore": 0,
+          "spaceAfter": 0,
+          "styleId": "normal"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "A v1 document: plain JSON on disk, no container."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2,
+          "textAlign": null,
+          "blockId": "v1fix-head-0002",
+          "styleId": "heading-2"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Converted forever"
+          }
+        ]
+      }
+    ]
+  },
+  "metadata": {
+    "title": "v1 fixture",
+    "createdAt": "2026-01-15T09:00:00.000Z",
+    "modifiedAt": "2026-01-15T09:05:00.000Z",
+    "originalPath": "/home/old-machine/docs/v1-fixture.wpdoc",
+    "pageSetup": {
+      "pageSize": "Letter",
+      "margins": { "top": 72, "bottom": 72, "left": 72, "right": 72 },
+      "pageGap": 32
+    },
+    "styles": {
+      "definitions": [
+        {
+          "id": "legal-body",
+          "name": "Legal Body",
+          "kind": "paragraph",
+          "properties": { "fontSize": 14, "lineHeight": 1.5 }
+        }
+      ]
+    },
+    "lineNumbers": { "enabled": true, "mode": "per-page" }
+  }
+}
