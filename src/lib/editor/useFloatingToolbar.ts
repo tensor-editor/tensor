@@ -7,6 +7,14 @@ export interface FloatingToolbarPosition {
   top: number;
   bottom: number;
   placement: 'above' | 'below';
+  /** Visual clearance (px) between the anchor edge and the toolbar —
+   *  applied ONCE (the translateY). M-IMAGES-1.5.5: the paginated
+   *  path used to subtract EDGE_PAD and translate by 8px again — a
+   *  double-clearance that made the text toolbar float too tall above
+   *  the selection. The calculation now differs by KIND: text uses the
+   *  room-checked placement with the tight gap; images force above
+   *  their top edge with the same rhythm. */
+  gap: number;
 }
 
 const TOOLBAR_HEIGHT_ESTIMATE = 44;
@@ -46,6 +54,9 @@ export function useFloatingToolbar(editor: Editor | null, enabled: boolean) {
       if (!domSelection || domSelection.rangeCount === 0) return;
 
       const range = domSelection.getRangeAt(0);
+      // jsdom's Range lacks getClientRects (no layout); guard rather
+      // than crash — the toolbar simply doesn't reposition in tests.
+      if (typeof range.getClientRects !== 'function') return;
       const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
       if (rects.length === 0) return;
 
@@ -63,6 +74,7 @@ export function useFloatingToolbar(editor: Editor | null, enabled: boolean) {
         top: topRect.top,
         bottom: topRect.bottom,
         placement,
+        gap: VIEWPORT_EDGE_PADDING,
       });
     }
 

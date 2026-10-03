@@ -11,6 +11,8 @@ import { ensureStyleSync } from "@/lib/styles/styleExtensions";
 import { PaginatedView } from "./PaginatedView";
 import { PagelessEditor } from "./PagelessEditor";
 import { StylesStylesheet } from "@/lib/styles/StylesStylesheet";
+import { insertImageBlob, isExternalImageUrl } from "@/lib/media/insert";
+import { toast } from "@/components/ui/toast";
 
 export function Editor({ metrics }: { metrics?: TextMetrics }) {
   const setEditor = useDocumentStore((s) => s.setEditor);
@@ -51,6 +53,50 @@ export function Editor({ metrics }: { metrics?: TextMetrics }) {
         const link = target.closest('a');
         if (link) {
           event.preventDefault();
+          return true;
+        }
+        return false;
+      },
+      // M-IMAGES-1 — the two blob insert paths (the file picker is the
+      // third; all land in the ONE pipeline, media/insert.ts).
+      handlePaste: (_view, event) => {
+        // Clipboard image files: bytes already on the clipboard.
+        const files = [...event.clipboardData?.files ?? []].filter((f) =>
+          f.type.startsWith('image/'),
+        );
+        if (files.length > 0) {
+          event.preventDefault();
+          void insertImageBlob(useDocumentStore.getState().editor, files[0]!);
+          return true;
+        }
+        // External http(s) image source: REFUSED — no download arm
+        // (M-IMAGES-1.5), a toast says why, and ZERO network calls
+        // ever fire from a paste (the fonts privacy precedent,
+        // hardened). Clipboard IMAGE FILES (above) need no dialog —
+        // the bytes are already local.
+        const html = event.clipboardData?.getData('text/html') ?? '';
+        const imgSrc = /<img[^>]+src="(https?:\/\/[^"]+)"/i.exec(html)?.[1];
+        if (imgSrc && isExternalImageUrl(imgSrc)) {
+          event.preventDefault();
+          void toast.add({
+            title: 'External image not embedded',
+            description: 'External image links are not downloaded. Insert a picture from your device instead.',
+            type: 'warning',
+          });
+          return true;
+        }
+        return false;
+      },
+      handleDrop: (view, event, _slice) => {
+        const files = [...event.dataTransfer?.files ?? []].filter((f) =>
+          f.type.startsWith('image/'),
+        );
+        if (files.length > 0) {
+          event.preventDefault();
+          const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          void insertImageBlob(useDocumentStore.getState().editor, files[0]!).then(() => {
+            void dropPos;
+          });
           return true;
         }
         return false;

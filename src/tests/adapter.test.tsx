@@ -41,7 +41,7 @@ describe('incremental adapter (reference reuse)', () => {
     expect(after.doc.blocks[0]).toBe(before.doc.blocks[0]); // untouched: same object
     expect(after.doc.blocks[2]).toBe(before.doc.blocks[2]); // untouched: same object
     expect(after.doc.blocks[1]).not.toBe(before.doc.blocks[1]); // edited: new object
-    expect(after.doc.blocks[1].runs[0]!.text).toBe('tXwo');
+    expect((after.doc.blocks[1] as { runs: { text: string }[] }).runs[0]!.text).toBe('tXwo');
   });
 
   it('baseStyle change invalidates: new objects, correct new defaults', async () => {
@@ -50,8 +50,8 @@ describe('incremental adapter (reference reuse)', () => {
     const a = pmDocToSemantic(editor.state.doc, BASE);
     const b = pmDocToSemantic(editor.state.doc, { fontFamily: 'Georgia', fontSize: 20 });
     expect(b.doc.blocks[0]).not.toBe(a.doc.blocks[0]);
-    expect(b.doc.blocks[0].runs[0]!.style.fontFamily).toBe('Georgia');
-    expect(b.doc.blocks[0].runs[0]!.style.fontSize).toBe(20);
+    expect((b.doc.blocks[0] as { runs: { style: { fontFamily: string; fontSize: number } }[] }).runs[0]!.style.fontFamily).toBe('Georgia');
+    expect((b.doc.blocks[0] as { runs: { style: { fontFamily: string; fontSize: number } }[] }).runs[0]!.style.fontSize).toBe(20);
   });
 
   it('forced-break blocks clone per call but stay content-correct', async () => {
@@ -66,7 +66,9 @@ describe('incremental adapter (reference reuse)', () => {
     // The flow-clone breaks identity by design (sibling fact, not node fact).
     expect(b.doc.blocks[1]).not.toBe(a.doc.blocks[1]);
     // The node-facts inside are still shared.
-    expect(b.doc.blocks[1].runs).toBe(a.doc.blocks[1].runs);
+    expect((b.doc.blocks[1] as { runs: unknown[] }).runs).toBe(
+      (a.doc.blocks[1] as { runs: unknown[] }).runs,
+    );
   });
 
   it('positions stay fresh: deleting a block shifts later from/to', async () => {
@@ -79,7 +81,7 @@ describe('incremental adapter (reference reuse)', () => {
     const after = pmDocToSemantic(editor.state.doc, BASE);
     expect(after.blocks[0].text).toBe('two');
     expect(after.blocks[0].from).toBe(0); // shifted down — fresh positions
-    expect(after.doc.blocks[0].runs[0]!.text).toBe('two');
+    expect((after.doc.blocks[0] as { runs: { text: string }[] }).runs[0]!.text).toBe('two');
   });
 
   it('font family on the textStyle mark is extracted (tiptap v3 global attribute)', async () => {
@@ -92,7 +94,7 @@ describe('incremental adapter (reference reuse)', () => {
       editor.commands.setFontFamily('Courier New');
     });
     const adapted = pmDocToSemantic(editor.state.doc, BASE);
-    expect(adapted.doc.blocks[0].runs[0]!.style.fontFamily).toBe('Courier New');
+    expect((adapted.doc.blocks[0] as { runs: { style: { fontFamily: string } }[] }).runs[0]!.style.fontFamily).toBe('Courier New');
 
     // Pageless DOM sanity: the same mark renders in the hidden view.
     const styled = (document.querySelector('.pm-input-only [style*="font-family"]') as HTMLElement | null);

@@ -55,7 +55,10 @@ describe('adapter resolution through the registry', () => {
       editor.commands.applyParagraphStyle('legal-body');
     });
     const adapted = pmDocToSemantic(editor.state.doc, BASE, snapshot([LEGAL_BODY]));
-    const block = adapted.doc.blocks[0]!;
+    const block = adapted.doc.blocks[0] as {
+      runs: { style: { fontSize: number; lineHeight: number } }[];
+      firstLineIndent?: number;
+    };
     expect(block.runs[0]!.style.fontSize).toBe(14);
     expect(block.runs[0]!.style.lineHeight).toBe(1.5);
     expect(block.firstLineIndent).toBe(24);
@@ -71,7 +74,7 @@ describe('adapter resolution through the registry', () => {
         editor.commands.applyParagraphStyle('ghost-style');
       });
       const adapted = pmDocToSemantic(editor.state.doc, BASE, snapshot([]));
-      const block = adapted.doc.blocks[0]!;
+      const block = adapted.doc.blocks[0] as { runs: { style: { fontSize: number; fontFamily: string } }[] };
       expect(block.runs[0]!.style.fontSize).toBe(16);
       expect(block.runs[0]!.style.fontFamily).toBe('system-ui');
       expect(warn).toHaveBeenCalledTimes(1);
@@ -95,7 +98,7 @@ describe('adapter resolution through the registry', () => {
       editor.commands.applyCharStyle('meek');
     });
     const adapted = pmDocToSemantic(editor.state.doc, BASE, snapshot([meek]));
-    expect(adapted.doc.blocks[0]!.runs[0]!.style.bold).toBe(true);
+    expect(((adapted.doc.blocks[0] as unknown as { runs: { style: Record<string, unknown> }[] }).runs[0]!.style.bold)).toBe(true);
   });
 
   it('style color rides RunDecor (paint tier), engine hash untouched', async () => {
@@ -132,7 +135,7 @@ describe('transformed runs (amendment 3)', () => {
       editor.commands.applyParagraphStyle('shout');
     });
     const adapted = pmDocToSemantic(editor.state.doc, BASE, snapshot([SHOUT]));
-    expect(adapted.doc.blocks[0]!.runs[0]!.text).toBe('HELLO WORLD');
+    expect((adapted.doc.blocks[0] as unknown as { runs: { text: string }[] }).runs[0]!.text).toBe('HELLO WORLD');
     expect(adapted.blocks[0]!.text).toBe('HELLO WORLD');
     // LENGTH-PRESERVED: PM↔engine offsets stay identity-mapped.
     expect(adapted.blocks[0]!.text.length).toBe('hello world'.length);
@@ -173,10 +176,10 @@ describe('the registry epoch invalidates the adapter identity cache', () => {
     const edited = { ...LEGAL_BODY, properties: { ...LEGAL_BODY.properties, fontSize: 15 } };
     const b = pmDocToSemantic(editor.state.doc, BASE, snapshot([edited]));
     expect(b.doc.blocks[0]).not.toBe(a1.doc.blocks[0]);
-    expect(b.doc.blocks[0]!.runs[0]!.style.fontSize).toBe(15);
+    expect(((b.doc.blocks[0] as unknown as { runs: { style: Record<string, unknown> }[] }).runs[0]!.style.fontSize)).toBe(15);
 
     // The OLD resolved objects are untouched (immutability).
-    expect(a1.blocks[0]!.runs[0]!.style.fontSize).toBe(14);
+    expect(((a1.blocks[0] as unknown as { runs: { style: Record<string, unknown> }[] }).runs[0]!.style.fontSize)).toBe(14);
   });
 
   it("style-provided 'justify' is LOUD in paginated: align left + the one-time dropped warning", async () => {
@@ -215,7 +218,7 @@ describe('the registry epoch invalidates the adapter identity cache', () => {
     ]);
     const adapted = pmDocToSemantic(editor.state.doc, BASE, defs);
     expect(adapted.doc.blocks[0]!.kind).toBe('heading');
-    expect(adapted.doc.blocks[0]!.runs[0]!.style.fontSize).toBe(26);
+    expect(((adapted.doc.blocks[0] as unknown as { runs: { style: Record<string, unknown> }[] }).runs[0]!.style.fontSize)).toBe(26);
     void lookupStyle;
   });
 });

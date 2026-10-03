@@ -1,4 +1,4 @@
-import type { LayoutResult, TextMetrics } from '@tensor-editor/engine';
+import { fitDownImage, type LayoutResult, type TextMetrics } from '@tensor-editor/engine';
 import type { AdapterBlock } from './adapter';
 import { alignOffset } from './positionMap';
 
@@ -61,6 +61,17 @@ export function hitTest(
   for (const seg of line.segments) {
     const run = block.runs[seg.runIndex];
     if (!run) continue;
+    if (run.kind === 'inlineImage') {
+      // M-IMAGES-2 — the object token: ONE position per object (the
+      // engine's unbreakable-token contract). The advance is the
+      // CLAMPED width (fitDownImage on the line's base width —
+      // hit-precision only; PAINT parity uses the block's exact wrap
+      // width); a click inside the object resolves to its offset.
+      const dims = fitDownImage(run.width, run.height, cb.width, Infinity);
+      if (x < cursor + dims.width / 2) return { blockId: line.blockId, offset: seg.start };
+      cursor += dims.width;
+      continue;
+    }
     for (let i = seg.start; i < seg.end; i++) {
       const w = metrics.measure(block.text[i]!, run.style);
       if (x < cursor + w / 2) return { blockId: line.blockId, offset: i };

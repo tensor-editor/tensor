@@ -25,6 +25,10 @@ export const ConfigSchema = z.object({
     colorDisplayFormat: z.enum(['hex', 'rgb', 'hsl']).default('hex'),
     customColors: z.array(z.string()).default([]),
     showNonPrintingChars: z.boolean().default(false),
+    /** M-IMAGES-1: caption DISPLAY toggle (the NPC precedent —
+     *  presentation-only ink, both modes; the model is untouched and
+     *  ToF reads captions regardless). Default: captions visible. */
+    showCaptions: z.boolean().default(true),
     zoomLevel: z.number().default(100),
     /** Painted-selection background; '' = theme primary at selection
      * opacity (the default look). */
@@ -44,6 +48,7 @@ export const ConfigSchema = z.object({
     colorDisplayFormat: 'hex',
     customColors: [],
     showNonPrintingChars: false,
+    showCaptions: true,
     zoomLevel: 100,
     selectionColor: '',
     measurementUnit: 'inches',

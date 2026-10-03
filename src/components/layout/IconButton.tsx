@@ -5,7 +5,7 @@ import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { useShortcutDisplay } from '@/lib/useShortcutDisplay';
 import { formatShortcutParts } from '@/lib/shortcuts';
 
-interface IconButtonProps {
+interface IconButtonProps extends React.ComponentProps<'button'> {
   label: string;
   icon: ReactNode;
   active?: boolean;
@@ -14,7 +14,7 @@ interface IconButtonProps {
   shortcutId?: string;
 }
 
-export function IconButton({ label, icon, active, disabled, onClick, shortcutId }: IconButtonProps) {
+export function IconButton({ label, icon, active, disabled, onClick, shortcutId, ...rest }: IconButtonProps) {
   const shortcut = useShortcutDisplay(shortcutId ?? '');
 
   return (
@@ -28,6 +28,7 @@ export function IconButton({ label, icon, active, disabled, onClick, shortcutId 
               onClick={onClick}
               disabled={disabled}
               aria-label={label}
+              {...rest}
               // `active` marks every current use a toggle state (bold,
               // alignment, mode, ...) — announce it to AT.
               {...(active !== undefined ? { 'aria-pressed': active } : {})}

@@ -73,6 +73,13 @@ export async function openDocument(editor: Editor): Promise<OpenDocumentResult |
   const file = await openWpdoc(path);
 
   editor.commands.setContent(file.docJSON);
+  // M-IMAGES-1: legacy dim-less images backfill (measure → write attrs
+  // → the standard PM-update relayout; see media/backfill.ts for the
+  // lineage note). Fire-and-forget — pending images stay in the
+  // pageless fallback until the dims land.
+  void import('@/lib/media/backfill').then(({ backfillImageDims }) =>
+    backfillImageDims(editor),
+  );
   return {
     path,
     pageSetup: file.metadata.pageSetup ?? null,

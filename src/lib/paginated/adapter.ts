@@ -3,6 +3,7 @@ import type {
   Block,
   CodeBlockBlock,
   HeadingBlock,
+  ImageBlock,
   ParagraphBlock,
   Run,
   SemanticDoc,
@@ -91,6 +92,10 @@ export interface BlockPaint {
   /** codeBlock backgrounds (the kind's paint face — carried here so the
    * painter stays hint-driven, one extras field for all block decor). */
   code?: boolean;
+  /** M-IMAGES-1: a styleId 'caption' paragraph — the DISPLAY toggle's
+   *  paint-side hook (document-derived fact; config stays out of the
+   *  projection). */
+  caption?: boolean;
 }
 
 export interface AdapterBlock {
@@ -190,7 +195,7 @@ function defaultListStyle(kind: 'bullet' | 'ordered'): string {
  */
 interface CachedConversion {
   gen: number;
-  semantic: ParagraphBlock | HeadingBlock | CodeBlockBlock;
+  semantic: ParagraphBlock | HeadingBlock | CodeBlockBlock | ImageBlock;
   adapter: AdapterBlock;
   /** Projection facts this conversion was built under (sibling-dependent). */
   indentLeft: number;
@@ -198,6 +203,22 @@ interface CachedConversion {
 }
 
 const nodeCache = new WeakMap<PMNode, CachedConversion>();
+
+/** Float+flow refusal warning — once per session (the styles warned-
+ * set precedent): the adapter STRIPS the flow from floated images so
+ * the engine's validateFloatFlow never sees a violation from the
+ * shell; the doc model still carries keepNext (the caption bond
+ * returns if the float is removed). */
+const warnedFloatFlow = new Set<string>();
+function warnFloatFlowOnce(): void {
+  if (warnedFloatFlow.has('float-flow')) return;
+  warnedFloatFlow.add('float-flow');
+  if (import.meta.env.DEV) {
+    console.warn(
+      '[adapter] a floated image cannot carry the caption bond (keepNext) — the flow is omitted for layout; the bond returns when the float is removed'
+    );
+  }
+}
 let cacheGeneration = 0;
 let lastContextKey: string | null = null;
 
@@ -351,11 +372,23 @@ function ownIndentRight(node: PMNode): number {
 
 /** How a PM node projects into the engine's Block union. */
 interface Projection {
-  kind: 'paragraph' | 'heading' | 'codeBlock';
-  /** Block-tier left indent (px) — 0 for unindented blocks. */
+  kind: 'paragraph' | 'heading' | 'codeBlock' | 'image';
+  /** Block-tier left indent (px) — 0 for unindented blocks. Images
+   * don't wrap — the indent family is ignored for them (engine
+   * ImageBlock law). */
   indentLeft: number;
   /** Paint hints (sibling facts — see CachedConversion). */
   paint?: BlockPaint;
+  // ─── M-IMAGES-1: the image projection fields (kind 'image') ────
+  /** OPAQUE ref — 'media://<sha256>'; echoes to placed[]. */
+  src?: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+  align?: 'left' | 'center' | 'right';
+  keepNext?: boolean;
+  /** M-IMAGES-2: the anchored float echo (dx/dy/z). */
+  float?: { dx: number; dy: number; z: 'front' | 'behind' } | null;
 }
 
 /**
@@ -429,6 +462,48 @@ function convertNode(
 ): CachedConversion {
   const kind = projection.kind;
 
+  // M-IMAGES-1 — images convert structurally: no runs, no text, no
+  // BlockTier (indent/firstLine are wrap geometry the engine IGNORES
+  // for images by law; align is their horizontal control, relative to
+  // the FULL content box). src OPAQUE, dims REQUIRED (validated at
+  // the projection site), keepNext = the caption bond (FlowPolicy).
+  // M-IMAGES-2 — FLOATS (E-IMG-3): the float echo rides through; and
+  // the LOUD REFUSAL: a floated block NEVER carries flow — the
+  // engine's validateFloatFlow THROWS on float+keepNext (a float is
+  // not in flow and must not derive pages), so the adapter must never
+  // EMIT one. float present → flow omitted entirely, warned once.
+  if (kind === 'image') {
+    const float =
+      projection.float && Number.isFinite(projection.float.dx) && Number.isFinite(projection.float.dy)
+        ? { dx: projection.float.dx, dy: projection.float.dy, z: projection.float.z }
+        : null;
+    if (float && projection.keepNext) {
+      warnFloatFlowOnce();
+    }
+    const semantic: ImageBlock = {
+      id: blockId,
+      kind: 'image',
+      src: projection.src ?? '',
+      width: projection.width ?? 0,
+      height: projection.height ?? 0,
+      align: projection.align ?? 'left',
+      alt: projection.alt ?? '',
+      ...(float
+        ? { float }
+        : projection.keepNext
+          ? { flow: { keepNext: true } }
+          : {}),
+    };
+    return {
+      gen: cacheGeneration,
+      semantic,
+      // The AdapterBlock mirrors paint-side facts: images carry no
+      // text; placed[] (not lines[]) is the render surface.
+      adapter: { id: blockId, runs: [], text: '', from: 0, to: 0, align: 'left', runDecor: [] },
+      indentLeft: 0,
+    };
+  }
+
   // The paragraph tier's style identity. Headings resolve through
   // `heading-{level}` — the styleId attr's guaranteed twin (the
   // HeadingSync plugin maintains the alignment); paragraphs through
@@ -463,6 +538,34 @@ function convertNode(
   } else {
     node.forEach((child) => {
       if (!child.isText || !child.text) {
+        // M-IMAGES-2 — INLINE OBJECTS (E-IMG-2): an inlineImage child
+        // maps to an InlineImageRun in the containing paragraph's
+        // runs — ONE position per object (the U+FFFC token appended to
+        // the block's concatenated text keeps the PM-offset identity:
+        // shell text/offsets stay source-coordinate-exact).
+        if (child.type.name === 'inlineImage') {
+          const ia = child.attrs as {
+            src?: string | null;
+            width?: number | null;
+            height?: number | null;
+            alt?: string;
+          };
+          if (typeof ia.width !== 'number' || typeof ia.height !== 'number') {
+            throw new UnsupportedDocError(
+              '[adapter] inline image lacks dims — inline objects carry REQUIRED document data'
+            );
+          }
+          runs.push({
+            kind: 'inlineImage',
+            src: String(ia.src ?? ''),
+            width: ia.width,
+            height: ia.height,
+            alt: ia.alt ?? '',
+          });
+          runDecor.push({});
+          text += '\uFFFC';
+          return;
+        }
         throw new UnsupportedDocError(
           `[adapter] unsupported inline node '${child.type.name}' inside ${kind}: ` +
             'the engine has no inline-break model (hardBreak included) — the pageless ' +
@@ -839,7 +942,20 @@ export function pmDocToSemantic(
     }
 
     if (name === 'paragraph' || name === 'heading') {
-      push(projected(node, { kind: name, indentLeft: 0 }, offset), node, offset);
+      const styleId = typeof node.attrs?.styleId === 'string' && node.attrs.styleId
+        ? node.attrs.styleId
+        : 'normal';
+      push(
+        projected(
+          node,
+          styleId === 'caption'
+            ? { kind: name, indentLeft: 0, paint: { caption: true } }
+            : { kind: name, indentLeft: 0 },
+          offset,
+        ),
+        node,
+        offset,
+      );
     } else if (name === 'bulletList' || name === 'orderedList') {
       walkList(node, offset, 1);
     } else if (name === 'blockquote') {
@@ -852,11 +968,63 @@ export function pmDocToSemantic(
       // paragraph with a rule paint hint. One LineBox can never
       // fragment across pages.
       push(projected(node, { kind: 'paragraph', indentLeft: 0, paint: { rule: true } }, offset), node, offset);
+    } else if (name === 'image') {
+      // M-IMAGES-1 — the image joins the projection. src is OPAQUE
+      // (echoes through to placed[]); dims are REQUIRED DOCUMENT DATA
+      // (the engine's ImageBlock contract — never fetched at layout
+      // time). A dim-less node is the PENDING-BACKFILL state (legacy
+      // docs): throw the sentinel so the view falls back to pageless
+      // (which renders the node view's natural-size <img>) until the
+      // backfill writes the attrs — the standard update path then
+      // re-enters paginated (the fallback resets on every successful
+      // layout, PaginatedView's relayout receipt).
+      const imgAttrs = node.attrs as {
+        src?: string | null;
+        width?: number | null;
+        height?: number | null;
+        alt?: string;
+        align?: string | null;
+        keepNext?: boolean | null;
+        float?: { dx?: unknown; dy?: unknown; z?: unknown } | null;
+      };
+      if (typeof imgAttrs.width !== 'number' || typeof imgAttrs.height !== 'number') {
+        throw new UnsupportedDocError(
+          `[adapter] image at offset ${offset} lacks dims — pending backfill (the open path measures legacy images)`
+        );
+      }
+      push(
+        projected(
+          node,
+          {
+            kind: 'image',
+            indentLeft: 0,
+            src: String(imgAttrs.src ?? ''),
+            width: imgAttrs.width,
+            height: imgAttrs.height,
+            alt: imgAttrs.alt ?? '',
+            align: imgAttrs.align === 'center' || imgAttrs.align === 'right' ? imgAttrs.align : 'left',
+            keepNext: imgAttrs.keepNext === true,
+            float:
+              imgAttrs.float && typeof imgAttrs.float === 'object'
+                ? {
+                    dx: Number(imgAttrs.float.dx) || 0,
+                    dy: Number(imgAttrs.float.dy) || 0,
+                    z: imgAttrs.float.z === 'behind' ? 'behind' : 'front',
+                  }
+                : null,
+          },
+          offset,
+        ),
+        node,
+        offset,
+      );
     } else {
-      // THE THROW LIST (M6.1): only the true future features remain.
+      // THE THROW LIST (M6.1, pruned by M-IMAGES-1): only the true
+      // future features remain — BEFORE this milestone the list was
+      // (table, image, drawing); image has shipped.
       throw new UnsupportedDocError(
         `[adapter] unsupported block kind '${name}' at offset ${offset}: future features ` +
-          '(table, image, drawing) — the pageless fallback renders them until the engine supports them'
+          '(table, drawing) — the pageless fallback renders them until the engine supports them'
       );
     }
   });

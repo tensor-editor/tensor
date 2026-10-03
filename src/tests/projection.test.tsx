@@ -126,11 +126,12 @@ describe('projection: blockquote, codeBlock, horizontalRule', () => {
 
     expect(doc.blocks[0].kind).toBe('codeBlock');
     // Pageless look receipt: UA monospace + inherited 16px default.
-    expect(doc.blocks[0].runs.every((r) => r.style.fontFamily === 'monospace')).toBe(true);
-    expect(doc.blocks[0].runs.every((r) => r.style.fontSize === 16)).toBe(true);
+    const codeRuns = (doc.blocks[0] as { runs: { style: { fontFamily: string; fontSize: number } }[] }).runs;
+    expect(codeRuns.every((r) => r.style.fontFamily === 'monospace')).toBe(true);
+    expect(codeRuns.every((r) => r.style.fontSize === 16)).toBe(true);
     // One run per source line ('\n' kept at each line's end; blank line
     // = a '\n' run) — the engine's source-line breaker consumes them.
-    expect(doc.blocks[0].runs.map((r) => r.text)).toEqual([
+    expect(((doc.blocks[0] as { runs: { text: string }[] }).runs).map((r) => r.text)).toEqual([
       'alpha\n',
       'beta\n',
       '\n',

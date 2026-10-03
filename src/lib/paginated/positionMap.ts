@@ -1,5 +1,5 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
-import type { LayoutResult, LineBox, TextMetrics } from '@tensor-editor/engine';
+import type { LayoutResult, LineBox, TextMetrics, TextStyle } from '@tensor-editor/engine';
 import type { AdapterBlock } from './adapter';
 
 // THE PRINCIPLE: all selection state changes go through PM
@@ -92,7 +92,10 @@ export function lineOffsetX(
     if (offset <= seg.start) break;
     const end = Math.min(offset, seg.end);
     const run = block.runs[seg.runIndex];
-    if (run) x += metrics.measure(block.text.slice(seg.start, end), run.style);
+    // M-IMAGES-2: objects have no text metrics — the engine's line
+    // geometry already accounts for their advance; the caret x math
+    // walks text only.
+    if (run && run.kind !== 'inlineImage') x += metrics.measure(block.text.slice(seg.start, end), run.style);
     if (offset < seg.end) break;
   }
   return x;
@@ -214,13 +217,14 @@ export function textRangeTextExtents(
       if (a >= b) continue;
       const run = block.runs[seg.runIndex];
       if (!run) continue;
+      if (run.kind === 'inlineImage') continue; // objects: engine-seated
       ascent = Math.max(ascent, metrics.ascent(run.style));
       descent = Math.max(descent, metrics.descent(run.style));
     }
     if (ascent + descent === 0) {
       // No matched glyphs on this line (empty textblock): fall back
       // to the block's effective style — the P1 zero-length run.
-      const style = block.runs[0]?.style;
+      const style = (block.runs[0] as { style?: TextStyle } | undefined)?.style;
       if (style) {
         ascent = metrics.ascent(style);
         descent = metrics.descent(style);
@@ -259,12 +263,12 @@ function textBandHeight(line: LineBox, block: AdapterBlock, metrics: TextMetrics
   let hasRuns = false;
   for (const seg of line.segments) {
     const run = block.runs[seg.runIndex];
-    if (!run) continue;
+    if (!run || run.kind === 'inlineImage') continue; // objects: engine-seated
     hasRuns = true;
     descent = Math.max(descent, metrics.descent(run.style));
   }
   if (!hasRuns) {
-    const style = block.runs[0]?.style;
+    const style = (block.runs[0] as { style?: TextStyle } | undefined)?.style;
     if (style) {
       hasRuns = true;
       descent = metrics.descent(style);

@@ -7,7 +7,8 @@ import { nanoid } from 'nanoid';
  * Author-assigned, stable block ids on every block the paginated
  * projection turns into an engine Block — top-level paragraphs and
  * headings, list items' inner paragraphs (at ANY nesting depth),
- * blockquote bodies, codeBlocks, and horizontalRules. The engine's
+ * blockquote bodies, codeBlocks, horizontalRules, and images
+ * (M-IMAGES-1: PlacedRect carries the same edit-survival blockId). The engine's
  * LineBox/FragmentBreak records carry `blockId` as the edit-survival
  * identity ("author-assigned, stable across edits by contract" —
  * engine/src/types.ts), and its caches are id-keyed, so the shell must
@@ -28,7 +29,7 @@ import { nanoid } from 'nanoid';
  * plugin is the shell-side guarantee, not the enforcement.
  */
 
-const ID_BEARING_KINDS = ['paragraph', 'heading', 'codeBlock', 'horizontalRule'];
+const ID_BEARING_KINDS = ['paragraph', 'heading', 'codeBlock', 'horizontalRule', 'image'];
 
 /**
  * Mint ids for missing/duplicate ID-bearing blocks INTO `tr` (positions

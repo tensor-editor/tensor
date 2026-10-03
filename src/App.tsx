@@ -9,6 +9,8 @@ import { DocumentStatisticsDialog } from './components/dialogs/DocumentStatistic
 import { CustomPageSizeDialog } from './components/dialogs/CustomPageSizeDialog';
 import { StyleDialog } from './components/dialogs/StyleDialog';
 import { FontBrowserDialog } from './components/dialogs/FontBrowserDialog';
+import { AltTextDialog } from './components/dialogs/ImageDialogs';
+import { Toaster } from '@/components/ui/toast';
 import { CommandPalette } from './components/palette/CommandPalette';
 import { useConfigStore } from './lib/config/store';
 import { useConfigPersistence } from './lib/config/useConfigPersistence';
@@ -156,7 +158,9 @@ function App() {
       <CommandPalette />
       <StyleDialog state={styleDialog} onClose={styleDialog.close} />
       <FontBrowserDialog />
+      <AltTextDialog />
       <DocumentPropertiesDialog />
+      <Toaster />
       <DocumentStatisticsDialog />
       <CustomPageSizeDialog />
       <MarginsDialog />

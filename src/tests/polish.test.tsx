@@ -53,7 +53,7 @@ describe('empty-textblock inheritance (P1)', () => {
 
     // The empty block carries ONE zero-length run with the paragraph's
     // effective style (the adapter's empty-textblock projection).
-    const emptyBlock = adapted.doc.blocks[1];
+    const emptyBlock = adapted.doc.blocks[1] as { runs: unknown[] };
     expect(emptyBlock.runs).toEqual([
       { text: '', style: { fontFamily: 'system-ui', fontSize: 16, lineHeight: 2 } },
     ]);
@@ -72,9 +72,9 @@ describe('empty-textblock inheritance (P1)', () => {
     const { editor } = renderTensor('<h1></h1><pre><code></code></pre>');
     await settle();
     const adapted = adapt(editor.state.doc);
-    expect(adapted.doc.blocks[0].runs[0].style.fontSize).toBe(32); // H1 default
-    expect(adapted.doc.blocks[1].runs[0].style.fontFamily).toBe('monospace');
-    expect(adapted.doc.blocks[1].runs[0].style.fontSize).toBe(16);
+    expect((adapted.doc.blocks[0] as { runs: { style: { fontSize: number } }[] }).runs[0]!.style.fontSize).toBe(32); // H1 default
+    expect((adapted.doc.blocks[1] as { runs: { style: { fontFamily: string; fontSize: number } }[] }).runs[0]!.style.fontFamily).toBe('monospace');
+    expect((adapted.doc.blocks[1] as { runs: { style: { fontFamily: string; fontSize: number } }[] }).runs[0]!.style.fontSize).toBe(16);
   });
 
   it('the caret on an empty 2.0-spaced paragraph is the 16px text band, matching neighbors', async () => {

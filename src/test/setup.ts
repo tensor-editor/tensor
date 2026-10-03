@@ -61,6 +61,27 @@ const stubContext: StubRecord = {
     actualBoundingBoxAscent: 0,
     actualBoundingBoxDescent: 0,
   }),
+  drawImage: function (this: StubRecord, ...args: unknown[]) {
+    // M-IMAGES-1: image paint ops — args[1..4] are x/y/w/h when the
+    // 9-arg form is used (img, x, y, w, h = 5-arg form at 1..4).
+    paintOps.push({ op: 'drawImage', args, fillStyle: this.fillStyle as string });
+  },
+  // M-IMAGES-1.5: the corner-radius clip path (roundRect + clip
+  // recorded; the path builders are no-ops — geometry rides the
+  // recorded ops).
+  beginPath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  arcTo: () => {},
+  closePath: () => {},
+  save: () => {},
+  restore: () => {},
+  clip: function (this: StubRecord, ...args: unknown[]) {
+    paintOps.push({ op: 'clip', args, fillStyle: this.fillStyle as string });
+  },
+  roundRect: function (this: StubRecord, ...args: unknown[]) {
+    paintOps.push({ op: 'roundRect', args, fillStyle: this.fillStyle as string });
+  },
 };
 
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {

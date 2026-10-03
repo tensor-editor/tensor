@@ -38,6 +38,12 @@ import {
   Sparkles,
   Strikethrough,
   Underline as UnderlineIcon,
+  MessageSquareText,
+  TextCursorInput,
+  Squircle,
+  WrapText,
+  BringToFront,
+  SendToBack,
   Undo2,
   ZoomIn,
   ZoomOut,
@@ -54,6 +60,9 @@ import { useSettingsDialogStore } from '@/lib/settings/store';
 import { usePaletteStore } from '@/lib/palette/store';
 import { useStyleDialogStore } from '@/lib/styles/dialogStore';
 import { useFontBrowserStore } from '@/lib/fonts/browserStore';
+import { insertCaptionForImage } from '@/lib/media/caption';
+import { setWrapMode } from '@/lib/media/wrap';
+import { useAltTextStore } from '@/components/dialogs/ImageDialogs';
 
 /**
  * M-PALETTE. The declarative app command registry — the single source
@@ -114,6 +123,46 @@ const isDirty = () => doc().isDirty;
  *  ShortcutsExtension command path by id — never re-implemented. */
 function editorCommand(id: string, def: Omit<CommandAction, 'id' | 'run' | 'contexts'>): CommandAction {
   return { ...def, id, contexts: ['editor'], run: () => { runEditorCommand(id); } };
+}
+
+/** ─── M-IMAGES-1.5 module-scope image helpers (shared by the
+ * command closure and the direct-entry write above). ────────────── */
+function selectedImageRef(): { pos: number; attrs: Record<string, unknown> } | null {
+  const editor = useDocumentStore.getState().editor;
+  if (!editor) return null;
+  const sel = editor.state.selection as unknown as {
+    node?: { type?: { name?: string }; attrs?: Record<string, unknown> };
+    from?: number;
+  };
+  if (sel.node?.type?.name !== 'image' || typeof sel.from !== 'number') return null;
+  return { pos: sel.from, attrs: sel.node.attrs ?? {} };
+}
+
+/** Radius law: clamp to [0, half the min dim] — an extreme radius
+ *  becomes the circle-ish pill, never a lie. */
+function clampRadiusRef(value: number, attrs: Record<string, unknown>): number {
+  const w = typeof attrs.width === 'number' ? attrs.width : 0;
+  const h = typeof attrs.height === 'number' ? attrs.height : 0;
+  const max = Math.floor(Math.min(w, h) / 2);
+  return Math.max(0, Math.min(max, value));
+}
+
+/** One attr write on the selected image (setNodeAttribute — the
+ *  standard PM path; paint-only attrs splice, geometry attrs
+ *  relayout). */
+function writeImageAttrsRef(writes: Record<string, unknown>): void {
+  const editor = useDocumentStore.getState().editor;
+  const sel = selectedImageRef();
+  if (!editor || !sel) return;
+  editor
+    .chain()
+    .command(({ tr, dispatch }) => {
+      if (dispatch) {
+        for (const [key, value] of Object.entries(writes)) tr.setNodeAttribute(sel.pos, key, value);
+      }
+      return true;
+    })
+    .run();
 }
 
 export const COMMANDS: CommandAction[] = [
@@ -353,6 +402,141 @@ export const COMMANDS: CommandAction[] = [
       });
     },
   },
+  // ─── M-IMAGES-1.5: the image commands (toolbar + palette dispatch
+  // through the same runs; editor-context, enablement = an image node
+  // is SELECTED — a NodeSelection). ──────────────────────────────
+  ...(() => {
+    const imageSelected = () => selectedImageRef() !== null;
+    const RADIUS_STEP = 4;
+    const alignCommand = (align: 'left' | 'center' | 'right') => ({
+      id: `imageAlign${align === 'left' ? 'Left' : align === 'center' ? 'Center' : 'Right'}`,
+      title: `Align Image ${align === 'left' ? 'Left' : align === 'center' ? 'Center' : 'Right'}`,
+      icon: align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight,
+      group: 'format' as const,
+      contexts: ['editor'] as ('app' | 'editor')[],
+      keywords: ['image', 'align', align],
+      enablement: imageSelected,
+      run: () => writeImageAttrsRef({ align }),
+    });
+    return [
+      alignCommand('left'),
+      alignCommand('center'),
+      alignCommand('right'),
+      {
+        id: 'imageAddCaption',
+        title: 'Add Caption to Image',
+        icon: MessageSquareText,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'caption', 'figure', 'label'],
+        enablement: imageSelected,
+        run: () => {
+          const editor = useDocumentStore.getState().editor;
+          if (editor) insertCaptionForImage(editor);
+        },
+      },
+      {
+        id: 'imageAltText',
+        title: 'Edit Image Alt Text',
+        icon: TextCursorInput,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'alt', 'accessibility', 'description'],
+        enablement: imageSelected,
+        run: () => {
+          const sel = selectedImageRef();
+          if (sel) {
+            useAltTextStore
+              .getState()
+              .open(sel.pos, String(sel.attrs.alt ?? ''), (sel.attrs.src as string | null) ?? null);
+          }
+        },
+      },
+      {
+        id: 'imageRadiusUp',
+        title: 'Increase Image Corner Radius',
+        icon: Squircle,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'radius', 'corner', 'round'],
+        enablement: imageSelected,
+        run: () => {
+          const sel = selectedImageRef();
+          if (!sel) return;
+          const next = clampRadiusRef(Number(sel.attrs.radius ?? 0) + RADIUS_STEP, sel.attrs);
+          writeImageAttrsRef({ radius: next });
+        },
+      },
+      {
+        id: 'imageRadiusDown',
+        title: 'Decrease Image Corner Radius',
+        icon: Squircle,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'radius', 'corner', 'round'],
+        enablement: imageSelected,
+        run: () => {
+          const sel = selectedImageRef();
+          if (!sel) return;
+          const next = clampRadiusRef(Number(sel.attrs.radius ?? 0) - RADIUS_STEP, sel.attrs);
+          writeImageAttrsRef({ radius: next });
+        },
+      },
+      {
+        id: 'imageWrapInline',
+        title: 'Image: In Line with Text',
+        icon: WrapText,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'wrap', 'inline', 'text', 'convert'],
+        enablement: imageSelected,
+        run: () => {
+          const editor = useDocumentStore.getState().editor;
+          if (editor) setWrapMode(editor, 'inline');
+        },
+      },
+      {
+        id: 'imageWrapFront',
+        title: 'Image: In Front of Text',
+        icon: BringToFront,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'wrap', 'float', 'front', 'anchor'],
+        enablement: imageSelected,
+        run: () => {
+          const editor = useDocumentStore.getState().editor;
+          if (editor) setWrapMode(editor, 'front');
+        },
+      },
+      {
+        id: 'imageWrapBehind',
+        title: 'Image: Behind Text',
+        icon: SendToBack,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'wrap', 'float', 'behind', 'background'],
+        enablement: imageSelected,
+        run: () => {
+          const editor = useDocumentStore.getState().editor;
+          if (editor) setWrapMode(editor, 'behind');
+        },
+      },
+      {
+        id: 'imageWrap',
+        title: 'Wrap Text Around Image',
+        icon: WrapText,
+        group: 'format' as const,
+        contexts: ['editor'] as ('app' | 'editor')[],
+        keywords: ['image', 'wrap', 'float', 'inline'],
+        // M-IMAGES-2 lights this (inline/floats) — the stub ships
+        // disabled everywhere (palette filters it out via enablement;
+        // the toolbar shows it disabled).
+        enablement: () => false,
+        run: () => {},
+      },
+    ];
+  })(),
+
   // The mode flavors — every one enables with its mode; invoking the
   // command while ALREADY in that exact state turns the gutter off
   // (toggle semantics, so the palette alone can fully drive the
@@ -551,6 +735,21 @@ export const COMMANDS: CommandAction[] = [
     keywords: ['style', 'quote', 'blockquote', 'apply'],
   }),
 ];
+
+/**
+ * M-IMAGES-1.5 — direct radius entry (the toolbar's input): the SAME
+ * clamp law the stepper commands enforce (half the min dim), written
+ * through the SAME attr path. Returns the CLAMPED value actually
+ * written (or null when no image is selected) so the input can
+ * re-display the truth.
+ */
+export function setImageRadiusOnSelection(value: number): number | null {
+  const sel = selectedImageRef();
+  if (!sel) return null;
+  const clamped = clampRadiusRef(Number.isFinite(value) ? Math.round(value) : 0, sel.attrs);
+  writeImageAttrsRef({ radius: clamped });
+  return clamped;
+}
 
 export function getCommand(id: string): CommandAction | undefined {
   return COMMANDS.find((c) => c.id === id);

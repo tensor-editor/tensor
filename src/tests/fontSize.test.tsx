@@ -136,7 +136,7 @@ describe('stepFontSize', () => {
     expect(mark?.attrs.fontSize).toBe('16px');
     expect(editor.getJSON().content![0]!.content![0]!.marks![0]!.attrs!.fontSize).toBe('16px');
     const adapted = pmDocToSemantic(editor.state.doc, BASE);
-    expect(adapted.doc.blocks[0].runs[0].style.fontSize).toBe(16);
+    expect((adapted.doc.blocks[0] as { runs: { style: { fontSize: number } }[] }).runs[0]!.style.fontSize).toBe(16);
   });
 
   it('unmarked text steps from the config default (16px → 19px)', async () => {
@@ -214,7 +214,8 @@ describe('adapter font-size/line-height pt paths', () => {
     });
     const adapted = pmDocToSemantic(editor.state.doc, BASE);
     // 12pt × 4/3 = 16px in the core; line-height 18pt at 16px = 1.5.
-    expect(adapted.doc.blocks[0].runs[0].style.fontSize).toBe(16);
-    expect(adapted.doc.blocks[0].runs[0].style.lineHeight).toBe(1.5);
+    const run0 = (adapted.doc.blocks[0] as { runs: { style: { fontSize: number; lineHeight: number } }[] }).runs[0]!;
+    expect(run0.style.fontSize).toBe(16);
+    expect(run0.style.lineHeight).toBe(1.5);
   });
 });

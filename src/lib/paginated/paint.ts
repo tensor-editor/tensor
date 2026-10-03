@@ -2,6 +2,7 @@ import type { LayoutResult, LineBox, Run, TextMetrics, TextStyle } from '@tensor
 import type { BlockPaint, RunDecor, TextAlign } from './adapter';
 import { applyVariantCaps, fontString } from './metrics';
 import { alignOffset } from './positionMap';
+import { fitDownImage } from '@tensor-editor/engine';
 
 /**
  * Painting LineBox[] onto a per-block-per-page canvas.
@@ -59,9 +60,21 @@ export interface PaintExtras {
    * border/tint, rule line. Absent = plain block, nothing extra. */
   paint?: BlockPaint;
   /** The marker's font — resolved by the caller from the block's first
-   * run, falling back to the document default for empty items
-   * ("style from the block's runs"). */
+   *  run, falling back to the document default for empty items
+   *  ("style from the block's runs"). */
   markerStyle?: TextStyle;
+  /** M-IMAGES-1: caption DISPLAY toggle — false = skip this block's
+   *  text ink entirely (the space stays: presentation-only, the NPC
+   *  precedent; the model and layout are untouched). */
+  showCaptions?: boolean;
+  /** M-IMAGES-2: the block's BASE wrap width — the inline-object
+   *  clamp's input (the engine's breakLines maxWidth, layout.ts:392).
+   *  The paint clamp calls the SAME fitDownImage primitive on the
+   *  SAME value; dims are never re-derived. */
+  objectMaxWidth?: number;
+  /** M-IMAGES-2: resolve a decoded bitmap for an inline image's sha
+   *  (media/bitmapCache). Absent bitmap → the tinted placeholder. */
+  resolveBitmap?: (sha: string) => HTMLImageElement | undefined;
 }
 
 /** Paint-only glyph substitution: nbsp → middle-dot, tab → arrow. */
@@ -139,6 +152,9 @@ export function paintLines(
   const runDecor = extras.runDecor;
   const npc = extras.npc === true;
   const paint = extras.paint;
+  // M-IMAGES-1: caption blocks with the display toggle OFF paint
+  // nothing — blank space, layout intact (display-only ink).
+  if (paint?.caption && extras.showCaptions === false) return;
   const markerStyle = extras.markerStyle;
 
   for (const line of lines) {
@@ -165,6 +181,35 @@ export function paintLines(
     for (const segment of line.segments) {
       const run = runs[segment.runIndex];
       if (!run) continue;
+      // M-IMAGES-2 — INLINE OBJECTS (E-IMG-2): the U+FFFC token paints
+      // as the image itself, BASELINE-SEATED (bottom at the baseline;
+      // the engine grew the line's ascent for it — the shell fills the
+      // engine's box, never computes one). The clamp is the engine's
+      // OWN fitDownImage on the SAME base wrap width (never
+      // re-derived); the x advance is the CLAMPED width — exactly the
+      // advance the engine measured for the token.
+      if (run.kind === 'inlineImage') {
+        const dims = fitDownImage(
+          run.width,
+          run.height,
+          extras.objectMaxWidth ?? contentWidth,
+          Infinity
+        );
+        const sha = run.src.startsWith('media://') ? run.src.slice('media://'.length) : null;
+        const bitmap = sha != null ? extras.resolveBitmap?.(sha) : undefined;
+        if (bitmap) {
+          ctx.drawImage(bitmap, x, baselineY - dims.height, dims.width, dims.height);
+        } else {
+          // The tinted placeholder (a load is in flight or the media
+          // is unresolved) — identical geometry to the future bitmap.
+          const prevFill = ctx.fillStyle;
+          ctx.fillStyle = 'rgba(0,0,0,0.08)';
+          ctx.fillRect(x, baselineY - dims.height, dims.width, dims.height);
+          ctx.fillStyle = prevFill;
+        }
+        x += dims.width;
+        continue;
+      }
       const decor = runDecor[segment.runIndex] ?? {};
       const segmentText = text.slice(segment.start, segment.end);
       const width = metrics.measure(segmentText, run.style);

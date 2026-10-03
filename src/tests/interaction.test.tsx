@@ -259,7 +259,10 @@ describe('floating toolbar at engine coords', () => {
     // bounds left 96, top 96, right 146, bottom 112; z=1, stack top 100
     // (the shared mock pins the stack's LEFT at 0).
     expect(bar.style.left).toBe('96px'); // 0 + 96
-    expect(bar.style.top).toBe('188px'); // 100 + 96 - 8 (above)
+    // M-IMAGES-1.5.5: ONE clearance now — the top is the anchor top
+    // (no EDGE_PAD subtraction), and the visual gap rides the
+    // toolbar's translateY(gap) alone (was: −8 here AND −8 there).
+    expect(bar.style.top).toBe('196px'); // 100 + 96 (gap in translateY)
   });
 });
 

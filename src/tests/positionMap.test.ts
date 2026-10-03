@@ -50,6 +50,7 @@ const lines = [
 ];
 
 const result: LayoutResult = {
+  placed: [], // M-IMAGES-1: no images in this fixture
   pages: [
     { index: 0, size: { x: 0, y: 0, width: 816, height: 1056 }, contentBox: { x: 96, y: 96, width: 624, height: 864 } },
     { index: 1, size: { x: 0, y: 0, width: 816, height: 1056 }, contentBox: { x: 96, y: 96, width: 624, height: 864 } },

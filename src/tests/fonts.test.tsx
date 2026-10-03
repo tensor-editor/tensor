@@ -430,7 +430,7 @@ describe('installed family reaches every surface', () => {
       fontSize: useConfigStore.getState().config.editor.defaultFontSize,
     };
     const adapted = pmDocToSemantic(editor.state.doc, base);
-    expect(adapted.doc.blocks[0].runs[0].style.fontFamily).toBe('TempFam');
+    expect((adapted.doc.blocks[0] as { runs: { style: { fontFamily: string } }[] }).runs[0]!.style.fontFamily).toBe('TempFam');
 
     // Paginated paint: fillText's ctx.font comes from fontString —
     // the ONE builder both measurement and paint consume.

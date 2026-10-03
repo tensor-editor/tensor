@@ -36,6 +36,9 @@ import { ensureStyleSync } from '@/lib/styles/styleExtensions';
 import { PageSheet } from './paginated/PageSheet';
 import { BlockCanvas } from './paginated/BlockCanvas';
 import { LineNumberGutter } from './paginated/LineNumberGutter';
+import { ImageLayer } from './paginated/ImageLayer';
+import { commitFloatDrag } from '@/lib/media/wrap';
+import { ImageSelection } from './paginated/ImageSelection';
 import { countLineNumbers } from '@/lib/paginated/lineNumbers';
 import { useFontRegistryStore } from '@/lib/fonts/registry';
 import { SelectionHighlights } from './paginated/SelectionHighlights';
@@ -44,6 +47,7 @@ import { FloatingToolbar } from './FloatingToolbar';
 import { LinkBubble } from './LinkBubble';
 import { useLinkBubble } from '@/lib/editor/useLinkBubble';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { bitmapVersionNow, resolveMediaBitmap, subscribeBitmaps } from '@/lib/media/bitmapCache';
 import { TooltipProvider } from '../ui/tooltip';
 
 /**
@@ -131,6 +135,27 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   }, []);
   const [selRects, setSelRects] = useState<PaintedRect[]>([]);
   const [toolbarPos, setToolbarPos] = useState<FloatingToolbarPosition | null>(null);
+  // M-IMAGES-1: the selected image's placed rect + model dims.
+  // M-IMAGES-1.5: corner radius per image blockId (paint-only) —
+  // derived from the PM doc so attr writes change its identity and
+  // ImageLayer repaints; NO store epoch involved (no epoch churn).
+  const imageRadii = useMemo(() => {
+    const map = new Map<string, number>();
+    editor?.state.doc.descendants((node) => {
+      if (node.type.name === 'image' && typeof node.attrs.blockId === 'string') {
+        map.set(node.attrs.blockId, Number(node.attrs.radius ?? 0));
+      }
+      return true;
+    });
+    return map;
+  }, [editor?.state.doc]);
+  const [imageSel, setImageSel] = useState<{
+    placed: import('@tensor-editor/engine').PlacedRect;
+    pos: number;
+    nodeWidth: number;
+    nodeHeight: number;
+    float: { dx: number; dy: number; z: 'front' | 'behind' } | null;
+  } | null>(null);
   const [searchPaint, setSearchPaint] = useState<SearchPaint | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
   const [adapterError, setAdapterError] = useState<Error | null>(null);
@@ -174,6 +199,19 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
   const showFloatingToolbar = useConfigStore((s) => s.config.useFloatingToolbar);
   // Display-only ink (M6): NPCs paint on screen; never a layout fact.
   const showNonPrintingChars = useConfigStore((s) => s.config.editor.showNonPrintingChars);
+  // M-IMAGES-1: caption display toggle (NPC precedent — ink only).
+  const showCaptions = useConfigStore((s) => s.config.editor.showCaptions);
+  // M-IMAGES-2.1 — the INLINE paint's arrival law: bumps when any
+  // bitmap lands (pending inline objects repaint once; no relayout —
+  // the bitmapVersion is geometry-free, it only rides boxKey).
+  const [bitmapEpoch, setBitmapEpoch] = useState(0);
+  useEffect(
+    () =>
+      subscribeBitmaps(() => {
+        setBitmapEpoch(bitmapVersionNow());
+      }),
+    []
+  );
   // Marker font fallback for EMPTY list items ("style from the block's
   // runs" — no runs → document default). Memoized for BlockCanvas's
   // prop-identity memo.
@@ -196,22 +234,31 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     [defaultFontFamily, defaultFontSize, mergedStyles]
   );
 
-  function computeToolbar(rects: readonly PaintedRect[]): FloatingToolbarPosition | null {
+  function computeToolbar(
+    rects: readonly PaintedRect[],
+    opts?: { forceAbove?: boolean }
+  ): FloatingToolbarPosition | null {
     const stack = stackRef.current;
     const bounds = paintedBounds(rects);
     if (!stack || !bounds) return null;
     const z = useConfigStore.getState().config.editor.zoomLevel / 100;
     const sr = stack.getBoundingClientRect();
     const view = (getScrollParent(stack) ?? stack).getBoundingClientRect();
-    const aboveTop = sr.top + bounds.top * z - EDGE_PAD;
-    const belowTop = sr.top + bounds.bottom * z + EDGE_PAD;
+    // ONE clearance (applied once by the toolbar's translateY) — the
+    // old code subtracted EDGE_PAD here AND translated by 8px again,
+    // floating the text toolbar twice as high as it should sit.
+    const gap = EDGE_PAD;
+    const aboveTop = sr.top + bounds.top * z;
+    const belowTop = sr.top + bounds.bottom * z;
+    // M-IMAGES-1.5: images ALWAYS get the toolbar at their TOP edge
+    // (Word behavior); text keeps the room-check above/below.
     const placement =
-      aboveTop - TOOLBAR_HEIGHT_EST >= view.top ? 'above' : 'below';
+      opts?.forceAbove || aboveTop - TOOLBAR_HEIGHT_EST >= view.top ? 'above' : 'below';
     const left = Math.min(
       Math.max(sr.left + bounds.left * z, view.left + EDGE_PAD),
       Math.max(view.left + EDGE_PAD, view.right - EDGE_PAD - TOOLBAR_WIDTH_EST)
     );
-    return { left, top: aboveTop, bottom: belowTop, placement };
+    return { left, top: aboveTop, bottom: belowTop, placement, gap };
   }
 
   function updateSelectionProjection() {
@@ -231,6 +278,32 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     // The status bar's page is VIEWPORT based (the
     // IntersectionObserver feed) — the caret no longer moves it.
     setPageInfo(current.result.pages.length, useDocumentStore.getState().currentPage);
+    // M-IMAGES-1: a NodeSelection on an image projects to the
+    // placed rect (selection state + resize handles).
+    const isImageNodeSelection =
+      typeof (selection as { node?: { type?: { name?: string } } }).node === 'object' &&
+      (selection as { node?: { type?: { name?: string } } }).node?.type?.name === 'image';
+    if (isImageNodeSelection) {
+      const node = (selection as unknown as { node: { attrs: Record<string, unknown> } }).node;
+      const blockId = node.attrs.blockId as string | undefined;
+      const placedRect = blockId
+        ? current.result.placed.find((pr) => pr.blockId === blockId) ?? null
+        : null;
+      const block = blockId ? current.blocks.find((b) => b.id === blockId) : undefined;
+      if (placedRect && block && typeof node.attrs.width === 'number' && typeof node.attrs.height === 'number') {
+        setImageSel({
+          placed: placedRect,
+          pos: block.from,
+          nodeWidth: node.attrs.width,
+          nodeHeight: node.attrs.height,
+          float: (node.attrs.float as { dx: number; dy: number; z: 'front' | 'behind' } | null) ?? null,
+        });
+      } else {
+        setImageSel(null);
+      }
+    } else {
+      setImageSel(null);
+    }
     const rects = selection.empty
       ? []
       : textRangeLineRects(
@@ -242,9 +315,40 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
           useDocumentStore.getState().pageSetup.pageGap
         );
     setSelRects(rects);
+    const imageNode = isImageNodeSelection
+      ? (selection as unknown as { node: { attrs: { blockId?: string } } }).node
+      : null;
+    const imageRectForToolbar =
+      imageNode?.attrs.blockId != null
+        ? current.result.placed.find((pr) => pr.blockId === imageNode.attrs.blockId) ?? null
+        : null;
+    // The image toolbar's rect is STACK-LOCAL (the same frame the text
+    // path feeds — pageIndex stride + contentBox included). The first
+    // cut passed content-relative coords, so the toolbar landed ~a
+    // page-top/center and 96px left of the image (the reported
+    // "center, a little left").
+    const stride = current.result.pages[0]!.size.height + useDocumentStore.getState().pageSetup.pageGap;
+    const imageToolbarRect: PaintedRect | null = imageRectForToolbar
+      ? {
+          pageIndex: imageRectForToolbar.pageIndex,
+          left:
+            current.result.pages[imageRectForToolbar.pageIndex]!.contentBox.x +
+            imageRectForToolbar.rect.x,
+          top:
+            imageRectForToolbar.pageIndex * stride +
+            current.result.pages[imageRectForToolbar.pageIndex]!.contentBox.y +
+            imageRectForToolbar.rect.y,
+          width: imageRectForToolbar.rect.width,
+          height: imageRectForToolbar.rect.height,
+        }
+      : null;
     setToolbarPos(
-      !draggingRef.current && !selection.empty && useConfigStore.getState().config.useFloatingToolbar
-        ? computeToolbar(rects)
+      !draggingRef.current &&
+        useConfigStore.getState().config.useFloatingToolbar &&
+        (imageToolbarRect || !selection.empty)
+        ? computeToolbar(imageToolbarRect ? [imageToolbarRect] : rects, {
+            forceAbove: imageToolbarRect != null, // ALWAYS at the image's top
+          })
         : null
     );
   }
@@ -457,7 +561,88 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
     // geometry is meaningless (L3), so letting the browser reveal its
     // native caret would scroll the App container to a nonsense spot.
     (editor.view.dom as HTMLElement).focus({ preventScroll: true });
+
+    // M-IMAGES-2: the Z-AWARE image hit-test. z is PAINT ORDER and the
+    // click rule mirrors it: 'front' floats (+ in-flow images — they
+    // never overlap text) WIN, checked first, topmost = last placed[];
+    // 'behind' floats LOSE to text — a click inside a line's rect goes
+    // to the text; a behind float is only selectable in text-empty
+    // space. Images are not in lines[], so the text hitTest below
+    // never sees them.
+    const stack = stackRef.current;
+    let behindCandidate: string | null = null;
+    if (stack && layout.result.placed.length > 0) {
+      const z = useConfigStore.getState().config.editor.zoomLevel / 100;
+      const sr = stack.getBoundingClientRect();
+      const localX = (e.clientX - sr.left) / z;
+      const localY = (e.clientY - sr.top) / z;
+      const page0 = layout.result.pages[0]!;
+      const stride = page0.size.height + pageSetup.pageGap;
+      const pageIndex = Math.max(0, Math.min(layout.result.pages.length - 1, Math.floor(localY / stride)));
+      const page = layout.result.pages[pageIndex]!;
+      const inPageY = localY - pageIndex * stride - page.contentBox.y;
+      const inPageX = localX - page.contentBox.x;
+      const inside = (p: (typeof layout.result.placed)[number]) =>
+        inPageX >= p.rect.x &&
+        inPageX <= p.rect.x + p.rect.width &&
+        inPageY >= p.rect.y &&
+        inPageY <= p.rect.y + p.rect.height;
+      // 1. FRONT + in-flow (topmost wins):
+      for (let i = layout.result.placed.length - 1; i >= 0; i--) {
+        const p = layout.result.placed[i]!;
+        if (p.pageIndex !== pageIndex || p.z === 'behind') continue;
+        if (inside(p)) {
+          const block = layout.blocks.find((b) => b.id === p.blockId);
+          if (block) {
+            editor.commands.setNodeSelection(block.from);
+            return;
+          }
+        }
+      }
+      // 2. The text track: a line's rect under the click means text
+      //    wins over any behind float (the paint-order mirror).
+      const textTrackHit = layout.result.lines.some(
+        (l) =>
+          l.pageIndex === pageIndex &&
+          inPageY >= l.rect.y &&
+          inPageY <= l.rect.y + l.rect.height,
+      );
+      // 3. BEHIND floats — only in text-empty space:
+      if (!textTrackHit) {
+        for (let i = layout.result.placed.length - 1; i >= 0; i--) {
+          const p = layout.result.placed[i]!;
+          if (p.pageIndex !== pageIndex || p.z !== 'behind') continue;
+          if (inside(p)) {
+            behindCandidate = p.blockId;
+            break;
+          }
+        }
+      }
+    }
+
     const pos = pmPosAt(e);
+    if (behindCandidate) {
+      const block = layout.blocks.find((b) => b.id === behindCandidate);
+      if (block) {
+        editor.commands.setNodeSelection(block.from);
+        return;
+      }
+    }
+    // M-IMAGES-2.1 — the INLINE object's click: hitTest resolves the
+    // token to its PM position (blockOffsetToPmPos — the object token
+    // occupies exactly the position BEFORE the node); nodeAt(pos) IS
+    // the inline image when the click landed inside the object's
+    // painted rect. NodeSelection, the same treatment a block image
+    // gets: the toolbar swaps to the image group (Wrap/Alt/Radius
+    // reachable), Backspace deletes. Clicking the TEXT around it
+    // resolves inside a text node → nodeAt is undefined → text path.
+    if (pos != null) {
+      const nodeAtPos = editor.state.doc.nodeAt(pos);
+      if (nodeAtPos?.type.name === 'inlineImage') {
+        editor.commands.setNodeSelection(pos);
+        return;
+      }
+    }
     if (pos == null) return;
 
     const now = Date.now();
@@ -951,6 +1136,19 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                 observeRef={observeSheet}
                 background={pageSetup.pageColor || undefined}
               >
+                {/* M-IMAGES-2 PAINT ORDER: 'behind' floats mount (and
+                    paint) BEFORE the text tracks; 'front' + in-flow
+                    mount AFTER (z is PAINT ORDER — the engine's
+                    field, split at the shell's two layer seams). */}
+                {(visiblePages === null || visiblePages.has(page.index)) && (
+                  <ImageLayer
+                    geometry={page}
+                    placed={result.placed.filter(
+                      (p) => p.pageIndex === page.index && p.z === 'behind',
+                    )}
+                    radii={imageRadii}
+                  />
+                )}
                 {(visiblePages === null || visiblePages.has(page.index)) &&
                   pageGroups.map((group) => {
                     const block = blocks.find((b) => b.id === group.blockId);
@@ -970,8 +1168,20 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                         runDecor={block.runDecor}
                         npc={showNonPrintingChars}
                         paint={block.paint}
-                        markerStyle={block.runs[0]?.style ?? defaultRunStyle}
+                        markerStyle={
+                          (block.runs.find((r) => r.kind !== 'inlineImage') as
+                            | { style: import('@tensor-editor/engine').TextStyle }
+                            | undefined)?.style ?? defaultRunStyle
+                        }
+                        wrapWidth={
+                          page.contentBox.width -
+                          (block.indentLeft ?? 0) -
+                          (block.indentRight ?? 0)
+                        }
                         styleEpoch={layout.styleEpoch}
+                        showCaptions={showCaptions}
+                        resolveBitmap={resolveMediaBitmap}
+                        bitmapEpoch={bitmapEpoch}
                       />
                     );
                   })}
@@ -993,6 +1203,29 @@ export function PaginatedView({ editor, metrics: injectedMetrics }: PaginatedVie
                       />
                     ) : null;
                   })()}
+
+                {/* The selected image's border + resize handles. */}
+                {imageSel && imageSel.placed.pageIndex === page.index && (
+                  <ImageSelection
+                    geometry={page}
+                    placed={imageSel.placed}
+                    nodeWidth={imageSel.nodeWidth}
+                    nodeHeight={imageSel.nodeHeight}
+                    editor={editor}
+                    pos={imageSel.pos}
+                    zoom={zoomLevel / 100}
+                    onFloatDrag={(dx: number, dy: number) =>
+                      commitFloatDrag(editor, imageSel.pos, imageSel.float, dx, dy)
+                    }
+                  />
+                )}
+                <ImageLayer
+                  geometry={page}
+                  placed={result.placed.filter(
+                    (p) => p.pageIndex === page.index && p.z !== 'behind',
+                  )}
+                  radii={imageRadii}
+                />
               </PageSheet>
             );
           })}

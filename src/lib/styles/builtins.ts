@@ -19,6 +19,11 @@ export const BUILTIN_DEFINITIONS: StyleDefinition[] = [
   { id: 'heading-2', name: 'Heading 2', kind: 'paragraph', properties: { fontSize: 24, bold: true } },
   { id: 'heading-3', name: 'Heading 3', kind: 'paragraph', properties: { fontSize: 19, bold: true } },
   { id: 'quote', name: 'Quote', kind: 'paragraph', properties: { italic: true } },
+  // M-IMAGES-1: the caption style — an ordinary built-in, editable
+  // like all built-ins (the ToF #31 hook reads captions REGARDLESS of
+  // the display toggle — the toggle is presentation-only, never a
+  // model fact).
+  { id: 'caption', name: 'Caption', kind: 'paragraph', properties: { fontSize: 12, italic: true } },
   { id: 'emphasis', name: 'Emphasis', kind: 'character', properties: { italic: true } },
   { id: 'strong', name: 'Strong', kind: 'character', properties: { bold: true } },
 ];

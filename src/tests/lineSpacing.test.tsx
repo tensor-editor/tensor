@@ -82,7 +82,7 @@ describe('line spacing attr path', () => {
     await settle();
 
     const adapted = pmDocToSemantic(editor.state.doc, BASE);
-    expect(adapted.doc.blocks[0].runs[0].style.lineHeight).toBe(2);
+    expect((adapted.doc.blocks[0] as { runs: { style: { lineHeight: number } }[] }).runs[0]!.style.lineHeight).toBe(2);
   });
 
   it('every observed UI value maps to its multiplier (parser table)', async () => {
@@ -123,9 +123,11 @@ describe('line spacing attr path', () => {
         editor.commands.updateAttributes('paragraph', { lineHeight: raw });
       });
       const adapted = pmDocToSemantic(editor.state.doc, BASE);
-      expect(adapted.doc.blocks[0].runs[0].style.lineHeight, `attr ${JSON.stringify(raw)}`).toBe(
-        expected
-      );
+      expect(
+        (adapted.doc.blocks[0] as { runs: { style: { lineHeight: number } }[] }).runs[0]!.style
+          .lineHeight,
+        `attr ${JSON.stringify(raw)}`,
+      ).toBe(expected);
     }
   });
 
@@ -138,7 +140,7 @@ describe('line spacing attr path', () => {
       editor.commands.setFontSize('32px'); // marks the selected run
     });
     const adapted = pmDocToSemantic(editor.state.doc, BASE);
-    const runs = adapted.doc.blocks[0].runs;
+    const runs = (adapted.doc.blocks[0] as { runs: { style: { fontSize: number; lineHeight: number } }[] }).runs;
     expect(runs[0].style.fontSize).toBe(32);
     expect(runs[0].style.lineHeight).toBe(25 / 32); // 25px at a 32px run
   });

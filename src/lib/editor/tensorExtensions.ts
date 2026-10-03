@@ -23,6 +23,8 @@ import { BlockIdExtension } from '@/lib/editor/BlockIdExtension';
 import { CharStyleMark, StyleCommandsExtension } from '@/lib/styles/styleExtensions';
 import { ScrollGuardExtension } from '@/lib/paginated/ScrollGuardExtension';
 import { PageBreakNode } from '@/lib/pagination/PageBreakNode';
+import { ImageNode } from '@/lib/editor/ImageNode';
+import { InlineImageNode } from '@/lib/editor/InlineImageNode';
 
 /** The Tensor editor's extension list — one source shared by the app
  * shell (Editor.tsx) and the test harness so tests exercise the exact
@@ -69,6 +71,8 @@ export function tensorExtensions(): Extensions {
     // atom renders its marker, and the adapter translates it into the
     // engine's forced-break spelling (flow.breakBefore: 'page').
     PageBreakNode,
+    ImageNode,
+    InlineImageNode,
     // Stable block ids (engine edit-survival contract) + the
     // paginated-mode scroll guard (L3).
     BlockIdExtension,
